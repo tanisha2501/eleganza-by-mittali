@@ -3,24 +3,74 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { products } from "../../lib/products";
+import { supabase } from "../../lib/supabase";
+import ProductReviews from "../ProductReviews";
 
-const sizes = [
-  "M",
-  "L",
-  "XL",
-  "XXL",
-  "XXXL",
-] as const;
+const getAvailableSizes = (product: Product): string[] => {
+  const stock = product.sizes;
+
+  if (!stock) return [];
+
+  const firstValue = Object.values(stock)[0];
+
+  // Colour-wise stock
+  if (
+    firstValue &&
+    typeof firstValue === "object"
+  ) {
+    return Array.from(
+      new Set(
+        Object.values(stock).flatMap(
+          (colourStock) =>
+            Object.keys(
+              colourStock as Record<string, number>
+            )
+        )
+      )
+    );
+  }
+
+  // Old flat stock structure
+  return Object.keys(
+    stock as Record<string, number>
+  );
+};
 
 type Product = {
   name: string;
   category: string;
-  price: string;
+  price: string | number;
   image?: string;
   images?: string[];
   description: string;
   colours?: string[];
-  sizes?: Record<string, number>;
+  sizes?:
+    | Record<string, number>
+    | Record<string, Record<string, number>>;
+};
+const getSizeStock = (
+  product: Product,
+  colour: string,
+  size: string
+) => {
+  const stock = product.sizes;
+
+  if (!stock) return 0;
+
+  const colourStock = stock[colour];
+
+  if (
+    colourStock &&
+    typeof colourStock === "object"
+  ) {
+    return colourStock[size] ?? 0;
+  }
+
+  if (typeof stock[size] === "number") {
+    return stock[size] as number;
+  }
+
+  return 0;
 };
 
 export default function ProductPage() {
@@ -34,24 +84,30 @@ export default function ProductPage() {
     useState(false);
 
   useEffect(() => {
-    const savedProducts =
-      localStorage.getItem(
-        "eleganza-products"
-      );
+  const loadProducts = async () => {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("id", { ascending: true });
 
-    if (savedProducts) {
-      const savedData = JSON.parse(
-        savedProducts
-      );
+    if (error) {
+      console.error("Error loading products:", error);
+      setAllProducts(products);
+      setProductsLoaded(true);
+      return;
+    }
 
-      setAllProducts([
-        ...products,
-        ...savedData,
-      ]);
+    if (data && data.length > 0) {
+      setAllProducts(data);
+    } else {
+      setAllProducts(products);
     }
 
     setProductsLoaded(true);
-  }, []);
+  };
+
+  loadProducts();
+}, []);
 
   const product = allProducts.find(
     (item) =>
@@ -60,8 +116,11 @@ export default function ProductPage() {
         .replaceAll(" ", "-") === slug
   );
 
-  const [size, setSize] =
-    useState("M");
+  const sizes = product
+  ? getAvailableSizes(product)
+  : [];
+
+ const [size, setSize] = useState("");
 
   const [colour, setColour] =
     useState("Default");
@@ -90,6 +149,11 @@ export default function ProductPage() {
     setColour(
       availableColours[0]
     );
+    const availableSizes = getAvailableSizes(product);
+
+    if (availableSizes.length > 0) {
+      setSize(availableSizes[0]);
+    }
   }, [product]);
 
   /*
@@ -117,53 +181,18 @@ export default function ProductPage() {
   /*
    * Load colour + size stock
    */
-  useEffect(() => {
-    if (!product) return;
+useEffect(() => {
+  if (!product) return;
 
-    const savedStock =
-      localStorage.getItem(
-        "eleganza-stock"
-      );
+  const stock = getSizeStock(
+    product,
+    colour,
+    size
+  );
 
-    if (savedStock) {
-      const stockData =
-        JSON.parse(savedStock);
-
-      const productStock =
-        stockData[product.name];
-
-      /*
-       * New colour-wise stock format
-       */
-      if (
-        productStock &&
-        productStock[colour] &&
-        typeof productStock[colour] ===
-          "object"
-      ) {
-        setCurrentStock(
-          productStock[colour][size] ??
-            0
-        );
-      }
-
-      /*
-       * Old size-only stock format
-       * This keeps existing products working.
-       */
-      else {
-        setCurrentStock(
-          product.sizes?.[size] ?? 0
-        );
-      }
-    } else {
-      setCurrentStock(
-        product.sizes?.[size] ?? 0
-      );
-    }
-
-    setQuantity(1);
-  }, [product, colour, size]);
+  setCurrentStock(stock);
+  setQuantity(1);
+}, [product, colour, size]);
 
   if (!productsLoaded) {
     return null;
@@ -352,9 +381,11 @@ export default function ProductPage() {
 
           <h1>{product.name}</h1>
 
-          <p className="product-detail-price">
-            {product.price}
-          </p>
+         <p className="product-detail-price">
+  Rs {Number(
+    String(product.price).replace(/[₹,Rs\s]/gi, "")
+  ).toLocaleString("en-IN")}
+</p>
 
           <div className="product-detail-line"></div>
 
@@ -424,79 +455,48 @@ export default function ProductPage() {
               </span>
             </div>
 
-            <div className="size-options">
-              {sizes.map(
-                (item) => {
-                  const savedStock =
-                    localStorage.getItem(
-                      "eleganza-stock"
-                    );
+<div className="size-options">
+  {sizes.map((item) => {
+    let availableSizeStock = 0;
 
-                  let availableSizeStock =
-                    0;
+    const stock = product.sizes;
 
-                  if (savedStock) {
-                    const stockData =
-                      JSON.parse(
-                        savedStock
-                      );
+    if (stock) {
+      const colourStock = stock[colour];
 
-                    const productStock =
-                      stockData[
-                        product.name
-                      ];
+      if (
+        colourStock &&
+        typeof colourStock === "object"
+      ) {
+        availableSizeStock =
+          colourStock[item] ?? 0;
+      } else if (
+        typeof stock[item] === "number"
+      ) {
+        availableSizeStock =
+          stock[item] as number;
+      }
+    }
 
-                    if (
-                      productStock &&
-                      productStock[
-                        colour
-                      ] &&
-                      typeof productStock[
-                        colour
-                      ] === "object"
-                    ) {
-                      availableSizeStock =
-                        productStock[
-                          colour
-                        ][item] ?? 0;
-                    } else {
-                      availableSizeStock =
-                        product.sizes?.[
-                          item
-                        ] ?? 0;
-                    }
-                  } else {
-                    availableSizeStock =
-                      product.sizes?.[
-                        item
-                      ] ?? 0;
-                  }
-
-                  return (
-                    <button
-                      key={item}
-                      disabled={
-                        availableSizeStock ===
-                        0
-                      }
-                      className={
-                        size === item
-                          ? "selected"
-                          : ""
-                      }
-                      onClick={() => {
-                        setSize(item);
-                        setQuantity(
-                          1
-                        );
-                      }}
-                    >
-                      {item}
-                    </button>
-                  );
-                }
-              )}
-            </div>
+    return (
+      <button
+        key={item}
+        disabled={availableSizeStock === 0}
+        className={
+          size === item
+            ? "selected"
+            : ""
+        }
+        onClick={() => {
+          setSize(item);
+          setQuantity(1);
+        }}
+      >
+        {item}
+      </button>
+    );
+  })}
+</div>
           </div>
 
           {/* QUANTITY */}
@@ -596,6 +596,7 @@ export default function ProductPage() {
           </div>
 
         </div>
+        <ProductReviews productName={product.name} />
       </div>
     </main>
   );

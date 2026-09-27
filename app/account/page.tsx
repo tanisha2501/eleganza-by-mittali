@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { supabase } from "../lib/supabase";
 
 type User = {
   name: string;
@@ -11,24 +13,32 @@ type User = {
 export default function AccountPage() {
   const [user, setUser] = useState<User | null>(null);
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem(
-      "eleganza-current-user"
-    );
+useEffect(() => {
+  const loadUser = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (!savedUser) {
+    if (!user) {
       window.location.href = "/login";
       return;
     }
 
-    setUser(JSON.parse(savedUser));
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem("eleganza-current-user");
-    window.location.href = "/";
+    setUser({
+      name: user.user_metadata?.name || "",
+      email: user.email || "",
+      mobile: user.user_metadata?.mobile || "",
+    });
   };
 
+  loadUser();
+}, []);
+
+const handleLogout = async () => {
+  await supabase.auth.signOut();
+  localStorage.removeItem("eleganza-current-user");
+  window.location.href = "/";
+};
   if (!user) {
     return null;
   }
@@ -56,10 +66,9 @@ export default function AccountPage() {
           </div>
 
           <div className="account-actions">
-            <a href="/account/orders">
-              MY ORDERS
-            </a>
-
+        <Link href="/account/orders">
+        MY ORDERS
+</Link>
             <button onClick={handleLogout}>
               LOGOUT
             </button>

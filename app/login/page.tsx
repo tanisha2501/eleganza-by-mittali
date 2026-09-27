@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { supabase } from "../lib/supabase";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -8,49 +9,49 @@ const [password, setPassword] = useState("");
 const [error, setError] = useState("");
 const [showPassword, setShowPassword] = useState(false);
 
-  const handleLogin = () => {
-    setError("");
+const handleLogin = async () => {
+  setError("");
 
-    if (!email || !password) {
-      setError("Please enter your email and password.");
-      return;
-    }
+  if (!email || !password) {
+    setError("Please enter your email and password.");
+    return;
+  }
 
-    const users = JSON.parse(
-      localStorage.getItem("eleganza-users") || "[]"
-    );
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  });
 
-    const user = users.find(
-      (item: { email: string; password: string }) =>
-        item.email.toLowerCase() === email.toLowerCase() &&
-        item.password === password
-    );
+  if (error) {
+    setError("Invalid email or password.");
+    return;
+  }
 
-    if (!user) {
-      setError("Invalid email or password.");
-      return;
-    }
+  if (!data.user) {
+    setError("Unable to log in. Please try again.");
+    return;
+  }
 
-    localStorage.setItem(
-  "eleganza-current-user",
-  JSON.stringify({
-    name: user.name,
-    email: user.email,
-    mobile: user.mobile,
-  })
-);
+  localStorage.setItem(
+    "eleganza-current-user",
+    JSON.stringify({
+      name: data.user.user_metadata?.name || "",
+      email: data.user.email || email,
+      mobile: data.user.user_metadata?.mobile || "",
+    })
+  );
 
-const checkoutRedirect = localStorage.getItem(
-  "eleganza-checkout-redirect"
-);
+  const checkoutRedirect = localStorage.getItem(
+    "eleganza-checkout-redirect"
+  );
 
-if (checkoutRedirect === "true") {
-  localStorage.removeItem("eleganza-checkout-redirect");
-  window.location.href = "/checkout";
-} else {
-  window.location.href = "/";
-}
-  };
+  if (checkoutRedirect === "true") {
+    localStorage.removeItem("eleganza-checkout-redirect");
+    window.location.href = "/checkout";
+  } else {
+    window.location.href = "/";
+  }
+};
 
   return (
     <main className="auth-page">

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { supabase } from "../../lib/supabase";
 
 type Order = {
   orderNumber: string;
@@ -23,6 +25,7 @@ type Order = {
   total: number;
   date: string;
   status: string;
+  paymentMethod: string;
 };
 
 type StockData = Record<
@@ -33,25 +36,28 @@ type StockData = Record<
 type SavedProduct = {
   name: string;
   category: string;
-  price: string;
-  images: string[];
+  price: string | number;
+  images?: string[];
+  image?: string;
   colours?: string[];
-  sizes?: Record<string, number>;
+  sizes?:
+    | Record<string, number>
+    | Record<string, Record<string, number>>;
 };
 
-const sizes = [
-  "M",
-  "L",
-  "XL",
-  "XXL",
-  "XXXL",
-] as const;
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const searchParams = useSearchParams();
+
+  const [highlightedOrder, setHighlightedOrder] =
+    useState<string | null>(null);
 
   const [savedProducts, setSavedProducts] =
     useState<SavedProduct[]>([]);
+
+    const [productColours, setProductColours] =
+  useState<Record<string, string[]>>({});
 
   const [stockData, setStockData] =
     useState<StockData>({
@@ -88,137 +94,255 @@ export default function OrdersPage() {
       },
     });
 
-  useEffect(() => {
-    const isAdmin =
-      localStorage.getItem(
-        "eleganza-admin"
+ useEffect(() => {
+  const loadOrders = async () => {
+    const {
+  data: { user },
+} = await supabase.auth.getUser();
+
+if (!user) {
+  window.location.href = "/admin/login";
+  return;
+}
+
+if (user.email !== "mittaligoyal2602@gmail.com") {
+  await supabase.auth.signOut();
+  window.location.href = "/admin/login";
+  return;
+}
+
+  const { data: ordersData, error: ordersError } =
+  await supabase
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+if (ordersError) {
+  console.error(
+    "Error loading orders:",
+    ordersError
+  );
+
+  alert(
+    `Orders error: ${ordersError.message}`
+  );
+} else if (ordersData) {
+  const formattedOrders: Order[] =
+    ordersData.map((order) => ({
+      orderNumber: order.order_number,
+      customer: {
+        name: order.customer_name,
+        mobile: order.customer_mobile,
+        email: order.customer_email,
+        address: order.address,
+        area: order.area,
+        city: order.city,
+        pincode: order.pincode,
+        state: order.state,
+      },
+      
+    items: order.items || [],
+total: Number(order.total),
+date: new Date(
+  order.created_at
+).toLocaleString("en-IN"),
+status: order.status || "Pending",
+paymentMethod: order.payment_method || "cod",
+    }));
+
+  setOrders(formattedOrders);
+}
+
+  const {
+  data: productsData,
+  error: productsError,
+} = await supabase
+  .from("products")
+  .select("name, colours, sizes")
+  .order("id", { ascending: true });
+
+if (productsError) {
+  console.error(
+    "Error loading inventory:",
+    productsError
+  );
+} else if (productsData) {
+  const formattedStock: StockData = {};
+
+productsData.forEach((product) => {
+  if (product.sizes) {
+    formattedStock[product.name] =
+      product.sizes;
+  }
+});
+
+const formattedColours: Record<
+  string,
+  string[]
+> = {};
+
+productsData.forEach((product) => {
+  if (
+    product.colours &&
+    Array.isArray(product.colours) &&
+    product.colours.length > 0
+  ) {
+    formattedColours[product.name] =
+      product.colours;
+  }
+});
+
+setStockData(formattedStock);
+setProductColours(formattedColours);
+
+    if (productsData) {
+  setSavedProducts(
+    productsData as SavedProduct[]
+  );
+}
+   };
+
+   };
+
+  loadOrders();
+}, []);
+useEffect(() => {
+  const orderNumber =
+    searchParams.get("order");
+
+  if (!orderNumber || orders.length === 0) {
+    return;
+  }
+
+  const matchingOrder = orders.find(
+    (order) =>
+      order.orderNumber === orderNumber
+  );
+
+  if (!matchingOrder) {
+    return;
+  }
+
+  setHighlightedOrder(orderNumber);
+
+  setTimeout(() => {
+    const element =
+      document.querySelector(
+        `[data-order-number="${CSS.escape(
+          orderNumber
+        )}"]`
       );
 
-    if (isAdmin !== "true") {
-      window.location.href =
-        "/admin/login";
-      return;
-    }
-
-    const savedOrders =
-      localStorage.getItem(
-        "eleganza-orders"
-      );
-
-    if (savedOrders) {
-      setOrders(
-        JSON.parse(savedOrders)
-      );
-    }
-
-    const savedStock =
-      localStorage.getItem(
-        "eleganza-stock"
-      );
-
-    if (savedStock) {
-      setStockData(
-        JSON.parse(savedStock)
-      );
-    }
-
-    const savedProductsData =
-      localStorage.getItem(
-        "eleganza-products"
-      );
-
-    if (savedProductsData) {
-      setSavedProducts(
-        JSON.parse(savedProductsData)
-      );
-    }
-  }, []);
-
-  const updateOrderStatus = (
-    orderNumber: string,
-    newStatus: string
-  ) => {
-    setOrders((currentOrders) => {
-      const updatedOrders =
-        currentOrders.map(
-          (order) =>
-            order.orderNumber ===
-            orderNumber
-              ? {
-                  ...order,
-                  status: newStatus,
-                }
-              : order
-        );
-
-      localStorage.setItem(
-        "eleganza-orders",
-        JSON.stringify(
-          updatedOrders
-        )
-      );
-
-      return updatedOrders;
+    element?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
     });
-  };
+  }, 100);
 
-  const handleLogout = () => {
-    localStorage.removeItem(
-      "eleganza-admin"
+  const timer = setTimeout(() => {
+    setHighlightedOrder(null);
+  }, 3000);
+
+  return () => clearTimeout(timer);
+}, [searchParams, orders]);
+
+  const updateOrderStatus = async (
+  orderNumber: string,
+  newStatus: string
+) => {
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      status: newStatus,
+    })
+    .eq("order_number", orderNumber);
+
+  if (error) {
+    console.error(
+      "Error updating order status:",
+      error
     );
 
-    window.location.href =
-      "/admin/login";
-  };
-
-  const handleDeleteProduct = (
-    productName: string
-  ) => {
-    const confirmed =
-      window.confirm(
-        `Are you sure you want to delete "${productName}"?`
-      );
-
-    if (!confirmed) return;
-
-    const updatedProducts =
-      savedProducts.filter(
-        (product) =>
-          product.name !==
-          productName
-      );
-
-    setSavedProducts(
-      updatedProducts
+    alert(
+      "Could not update order status. Please try again."
     );
 
-    localStorage.setItem(
-      "eleganza-products",
-      JSON.stringify(
-        updatedProducts
-      )
+    return;
+  }
+
+  setOrders((currentOrders) =>
+    currentOrders.map((order) =>
+      order.orderNumber === orderNumber
+        ? {
+            ...order,
+            status: newStatus,
+          }
+        : order
+    )
+  );
+};
+
+ const handleLogout = async () => {
+  await supabase.auth.signOut();
+
+  window.location.href =
+    "/admin/login";
+};
+
+  const handleDeleteProduct = async (
+  productName: string
+) => {
+  const confirmed = window.confirm(
+    `Are you sure you want to delete "${productName}"?`
+  );
+
+  if (!confirmed) return;
+
+  const { error } = await supabase
+    .from("products")
+    .delete()
+    .eq("name", productName);
+
+  if (error) {
+    console.error(
+      "Error deleting product:",
+      error
     );
 
+    alert(
+      "Could not delete product. Please try again."
+    );
+
+    return;
+  }
+
+  setSavedProducts((currentProducts) =>
+    currentProducts.filter(
+      (product) =>
+        product.name !== productName
+    )
+  );
+
+  setStockData((currentStock) => {
     const updatedStock = {
-      ...stockData,
+      ...currentStock,
     };
 
-    delete updatedStock[
-      productName
-    ];
+    delete updatedStock[productName];
 
-    setStockData(
-      updatedStock
-    );
+    return updatedStock;
+  });
 
-    localStorage.setItem(
-      "eleganza-stock",
-      JSON.stringify(
-        updatedStock
-      )
-    );
-  };
+  setProductColours((currentColours) => {
+    const updatedColours = {
+      ...currentColours,
+    };
 
+    delete updatedColours[productName];
+
+    return updatedColours;
+  });
+};
   /*
    * Get colours for a product.
    * Old products automatically use Default.
@@ -226,21 +350,28 @@ export default function OrdersPage() {
   const getProductColours = (
     productName: string
   ) => {
-    const product =
-      savedProducts.find(
-        (item) =>
-          item.name ===
-          productName
-      );
+const supabaseColours =
+  productColours[productName];
 
-    if (
-      product?.colours &&
-      product.colours.length > 0
-    ) {
-      return product.colours;
-    }
+if (
+  supabaseColours &&
+  supabaseColours.length > 0
+) {
+  return supabaseColours;
+}
 
-    return ["Default"];
+const product = savedProducts.find(
+  (item) => item.name === productName
+);
+
+if (
+  product?.colours &&
+  product.colours.length > 0
+) {
+  return product.colours;
+}
+
+return ["Default"];
   };
 
   /*
@@ -264,100 +395,86 @@ export default function OrdersPage() {
   /*
    * Update colour + size stock
    */
-  const updateStock = (
-    productName: string,
-    colour: string,
-    size: (typeof sizes)[number],
-    change: number
-  ) => {
-    setStockData(
-      (currentStock) => {
-        const productStock =
-          currentStock[
-            productName
-          ];
+const updateStock = async (
+  productName: string,
+  colour: string,
+ size: string,
+  change: number
+) => {
+  const productStock = stockData[productName];
 
-        if (!productStock) {
-          return currentStock;
-        }
+  if (!productStock) return;
 
-        let updatedProductStock;
+  let updatedProductStock;
 
-        if (
-          isColourWiseStock(
-            productStock
-          )
-        ) {
-          const colourStock =
-            productStock as Record<
-              string,
-              Record<string, number>
-            >;
+  if (isColourWiseStock(productStock)) {
+    const colourStock =
+      productStock as Record<
+        string,
+        Record<string, number>
+      >;
 
-          const currentValue =
-            colourStock[
-              colour
-            ]?.[size] ?? 0;
+    const currentValue =
+      colourStock[colour]?.[size] ?? 0;
 
-          updatedProductStock = {
-            ...colourStock,
-            [colour]: {
-              ...colourStock[
-                colour
-              ],
-              [size]: Math.max(
-                0,
-                currentValue +
-                  change
-              ),
-            },
-          };
-        } else {
-          /*
-           * Old product:
-           * treat it as Default colour
-           */
-          const oldStock =
-            productStock as Record<
-              string,
-              number
-            >;
-
-          const currentValue =
-            oldStock[size] ?? 0;
-
-          updatedProductStock = {
-            ...oldStock,
-            [size]: Math.max(
-              0,
-              currentValue +
-                change
-            ),
-          };
-        }
-
-        const updatedStock = {
-          ...currentStock,
-          [productName]:
-            updatedProductStock,
-        };
-
-        localStorage.setItem(
-          "eleganza-stock",
-          JSON.stringify(
-            updatedStock
-          )
-        );
-
-        return updatedStock;
-      }
+    const newValue = Math.max(
+      0,
+      currentValue + change
     );
-  };
+
+    updatedProductStock = {
+      ...colourStock,
+      [colour]: {
+        ...colourStock[colour],
+        [size]: newValue,
+      },
+    };
+  } else {
+    const oldStock =
+      productStock as Record<string, number>;
+
+    const currentValue =
+      oldStock[size] ?? 0;
+
+    updatedProductStock = {
+      ...oldStock,
+      [size]: Math.max(
+        0,
+        currentValue + change
+      ),
+    };
+  }
+
+  const { error } = await supabase
+    .from("products")
+    .update({
+      sizes: updatedProductStock,
+    })
+    .eq("name", productName);
+
+  if (error) {
+    console.error(
+      "Error updating stock:",
+      error
+    );
+
+    alert(
+      "Could not update stock. Please try again."
+    );
+
+    return;
+  }
+
+  setStockData((currentStock) => ({
+    ...currentStock,
+    [productName]: updatedProductStock,
+  }));
+};
 
   const getStockValue = (
     productName: string,
     colour: string,
-    size: (typeof sizes)[number]
+    size: string
   ) => {
     const productStock =
       stockData[productName];
@@ -426,28 +543,33 @@ export default function OrdersPage() {
 
         {/* HEADER */}
 
-        <div className="admin-header">
-          <div>
-            <p className="admin-small-heading">
-              ELEGANZA BY MITTALI
-            </p>
+<div className="admin-header">
+  <div>
+    <p className="admin-small-heading">
+      ELEGANZA BY MITTALI
+    </p>
 
-            <h1>Orders</h1>
-          </div>
+    <h1>Orders</h1>
+  </div>
 
-          <span className="orders-count">
-            {orders.length} Orders
-          </span>
+<nav className="admin-nav">
+  <a href="/admin/dashboard">Dashboard</a>
+  <a href="/admin/orders">Orders</a>
+  <a href="/admin/products/add">Add Product</a>
+  <a href="/admin/reviews">Reviews</a>
+</nav>
 
-          <button
-            className="admin-logout-btn"
-            onClick={
-              handleLogout
-            }
-          >
-            LOGOUT
-          </button>
-        </div>
+  <span className="orders-count">
+    {orders.length} Orders
+  </span>
+
+  <button
+    className="admin-logout-btn"
+    onClick={handleLogout}
+  >
+    LOGOUT
+  </button>
+</div>
 
         {/* STATS */}
 
@@ -593,10 +715,16 @@ export default function OrdersPage() {
 
                             <div className="inventory-size-list">
 
-                              {sizes.map(
-                                (
-                                  size
-                                ) => {
+                          {Object.keys(
+                                isColourWiseStock(productStock)
+                                  ? (
+                                      productStock as Record<
+                                        string,
+                                        Record<string, number>
+                                      >
+                                    )[colour] || {}
+                                  : (productStock as Record<string, number>)
+                              ).map((size) => {
 
                                   const currentSizeStock =
                                     getStockValue(
@@ -795,12 +923,16 @@ export default function OrdersPage() {
 
             {orders.map(
               (order) => (
-                <div
-                  className="order-card"
-                  key={
-                    order.orderNumber
-                  }
-                >
+              <div
+              className={`order-card ${
+                highlightedOrder ===
+                order.orderNumber
+                  ? "highlighted-order"
+                  : ""
+              }`}
+              key={order.orderNumber}
+              data-order-number={order.orderNumber}
+            >
 
                   <div className="order-card-header">
 
@@ -882,6 +1014,12 @@ export default function OrdersPage() {
                             .customer
                             .email
                         }
+                      </p>
+                      <p>
+                    <strong>Payment:</strong>{" "}
+                    {order.paymentMethod === "cod"
+                     ? "COD"
+                    : "Online Payment"}
                       </p>
 
                       <p>

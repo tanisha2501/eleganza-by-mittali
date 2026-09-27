@@ -1,19 +1,29 @@
 "use client";
 
 import { useState } from "react";
+import { supabase } from "../../lib/supabase";
 
 export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleLogin = () => {
-    if (password === "Eleganza@123") {
-      localStorage.setItem("eleganza-admin", "true");
-      window.location.href = "/admin/orders";
-    } else {
-      setError("Incorrect password. Please try again.");
-    }
-  };
+ const handleLogin = async () => {
+  setError("");
+
+  const email = "mittaligoyal2602@gmail.com";
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    setError("Incorrect email or password. Please try again.");
+    return;
+  }
+
+  window.location.href = "/admin/orders";
+};
 
   return (
     <main className="admin-login-page">

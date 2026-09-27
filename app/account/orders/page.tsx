@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabase";
 
 type Order = {
   orderNumber: string;
@@ -26,39 +27,66 @@ type Order = {
 
 export default function MyOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-  const loadOrders = () => {
-    const savedUser = localStorage.getItem(
-      "eleganza-current-user"
-    );
+  const loadOrders = async () => {
+  const savedUser = localStorage.getItem(
+    "eleganza-current-user"
+  );
 
-    if (!savedUser) {
-      window.location.href = "/login";
-      return;
-    }
+  if (!savedUser) {
+    window.location.href = "/login";
+    return;
+  }
 
-    const user = JSON.parse(savedUser);
+  const user = JSON.parse(savedUser);
 
-    const savedOrders =
-      localStorage.getItem("eleganza-orders");
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("customer_email", user.email)
+    .order("created_at", {
+      ascending: false,
+    });
 
-    if (savedOrders) {
-      const allOrders: Order[] =
-        JSON.parse(savedOrders);
+if (error) {
+  console.error(
+    "Error loading customer orders:",
+    error
+  );
+  setOrders([]);
+  setLoading(false);
+  return;
+}
+  const formattedOrders: Order[] = (data || []).map(
+    (order) => ({
+      orderNumber: order.order_number,
+      customer: {
+        name: order.customer_name,
+        mobile: order.customer_mobile,
+        email: order.customer_email,
+        address: order.address,
+        area: order.area,
+        city: order.city,
+        pincode: order.pincode,
+        state: order.state,
+      },
+      items: order.items || [],
+      total: Number(order.total),
+      date: new Date(
+        order.created_at
+      ).toLocaleDateString("en-IN"),
+      status: order.status,
+    })
+  );
 
-      const myOrders = allOrders.filter(
-        (order) =>
-          order.customer.email === user.email
-      );
+  setOrders(formattedOrders);
+  setLoading(false);
 
-      setOrders(myOrders.reverse());
-    } else {
-      setOrders([]);
-    }
-  };
+};
 
-  loadOrders();
+loadOrders();
 
   const interval = setInterval(loadOrders, 1000);
 
@@ -74,10 +102,9 @@ export default function MyOrdersPage() {
 
         <h1>My Orders</h1>
 
-        {orders.length === 0 ? (
-          <div className="no-customer-orders">
-            <h2>No Orders Yet</h2>
-
+  {orders.length === 0 && !loading ? (
+  <div className="no-customer-orders">
+    <h2>No Orders Yet</h2>
             <p>
               You haven't placed any orders with us yet.
             </p>

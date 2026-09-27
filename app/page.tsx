@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { products } from "./lib/products";
+import { supabase } from "./lib/supabase";
 const categories = [
   {
     name: "Farshi Suits",
@@ -43,7 +44,9 @@ type Product = {
   images?: string[];
   description: string;
   colours?: string[];
-  sizes?: Record<string, number>;
+  sizes?:
+  | Record<string, number>
+  | Record<string, Record<string, number>>;
 };
 
 export default function Home() {
@@ -56,35 +59,29 @@ type CartItem = {
 
 const [cart, setCart] = useState<CartItem[]>([]);
 const [allProducts, setAllProducts] =
-  useState<Product[]>(products);
+  useState<Product[]>([]);
 
 useEffect(() => {
-  const loadProducts = () => {
-    const savedProducts = localStorage.getItem(
-      "eleganza-products"
-    );
+  const loadProducts = async () => {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("id", { ascending: true });
 
-    if (savedProducts) {
-      const savedData = JSON.parse(savedProducts);
+    if (error) {
+      console.error("Error loading products:", error);
+      setAllProducts(products);
+      return;
+    }
 
-      setAllProducts([
-        ...products,
-        ...savedData,
-      ]);
+    if (data && data.length > 0) {
+      setAllProducts(data);
     } else {
       setAllProducts(products);
     }
   };
 
   loadProducts();
-
-  window.addEventListener("storage", loadProducts);
-  window.addEventListener("focus", loadProducts);
-
-  return () => {
-    window.removeEventListener("storage", loadProducts);
-    window.removeEventListener("focus", loadProducts);
-  };
 }, []);
 const [currentUser, setCurrentUser] = useState<{
   name: string;
@@ -138,19 +135,47 @@ useEffect(() => {
   
   const [wishlistOpen, setWishlistOpen] = useState(false);
   useEffect(() => {
-  const savedWishlist = localStorage.getItem("eleganza-wishlist");
+  const loadWishlist = async () => {
+    const savedUser = localStorage.getItem(
+      "eleganza-current-user"
+    );
 
-  if (savedWishlist) {
-    setWishlist(JSON.parse(savedWishlist));
-  }
+    if (!savedUser) {
+      setWishlist([]);
+      return;
+    }
+
+    const user = JSON.parse(savedUser);
+
+    const { data, error } = await supabase
+      .from("wishlists")
+      .select("product_name, colour, size")
+      .eq("user_email", user.email)
+      .order("created_at", {
+        ascending: true,
+      });
+
+    if (error) {
+      console.error(
+        "Error loading wishlist:",
+        error
+      );
+      setWishlist([]);
+      return;
+    }
+
+    setWishlist(
+      (data || []).map((item) => ({
+        name: item.product_name,
+        colour: item.colour,
+        size: item.size,
+      }))
+    );
+  };
+
+  loadWishlist();
 }, []);
 
-useEffect(() => {
-  localStorage.setItem(
-    "eleganza-wishlist",
-    JSON.stringify(wishlist)
-  );
-}, [wishlist]);
   const [selectedSizes, setSelectedSizes] = useState<
   Record<string, string>
 >({});
@@ -245,15 +270,17 @@ const getAvailableStock = (
   colour: string,
   size: string
 ) => {
-  const productStock =
-    sizeStock[productName];
+  const product = allProducts.find(
+    (item) => item.name === productName
+  );
 
-  if (!productStock) {
-    return 0;
-  }
+  if (!product) return 0;
 
-  const colourStock =
-    productStock[colour];
+  const stock = product.sizes;
+
+  if (!stock) return 0;
+
+  const colourStock = stock[colour];
 
   if (
     colourStock &&
@@ -262,52 +289,131 @@ const getAvailableStock = (
     return colourStock[size] ?? 0;
   }
 
-  return (
-    productStock[size] ?? 0
+  if (typeof stock[size] === "number") {
+    return stock[size] as number;
+  }
+
+  return 0;
+};
+const getAvailableSizes = (product: Product): string[] => {
+  const stock = product.sizes;
+
+  if (!stock) return [];
+
+  const firstValue = Object.values(stock)[0];
+
+  if (
+    firstValue &&
+    typeof firstValue === "object"
+  ) {
+    return Array.from(
+      new Set(
+        Object.values(stock).flatMap(
+          (colourStock) =>
+            Object.keys(
+              colourStock as Record<string, number>
+            )
+        )
+      )
+    );
+  }
+
+  return Object.keys(
+    stock as Record<string, number>
   );
 };
  
-const toggleWishlist = (
+const toggleWishlist = async (
   productName: string,
   size: string
 ) => {
+  const savedUser = localStorage.getItem(
+    "eleganza-current-user"
+  );
+
+  if (!savedUser) {
+    alert("Please login to use wishlist.");
+    return;
+  }
+
+  const user = JSON.parse(savedUser);
+
   const product = allProducts.find(
     (item) => item.name === productName
   );
 
+  if (!product) return;
+
   const colour =
     selectedColours[productName] ||
-    product?.colours?.[0] ||
+    product.colours?.[0] ||
     "Default";
 
-  setWishlist((currentWishlist) => {
-    const exists = currentWishlist.some(
-      (item) =>
-        item.name === productName &&
-        item.colour === colour &&
-        item.size === size
-    );
+  const exists = wishlist.some(
+    (item) =>
+      item.name === productName &&
+      item.colour === colour &&
+      item.size === size
+  );
 
-    if (exists) {
-      return currentWishlist.filter(
+  if (exists) {
+    const { error } = await supabase
+      .from("wishlists")
+      .delete()
+      .eq("user_email", user.email)
+      .eq("product_name", productName)
+      .eq("colour", colour)
+      .eq("size", size);
+
+    if (error) {
+      console.error(
+        "Error removing wishlist item:",
+        error
+      );
+      alert("Could not remove from wishlist.");
+      return;
+    }
+
+    setWishlist((currentWishlist) =>
+      currentWishlist.filter(
         (item) =>
           !(
             item.name === productName &&
             item.colour === colour &&
             item.size === size
           )
-      );
-    }
+      )
+    );
 
-    return [
-      ...currentWishlist,
-      {
-        name: productName,
-        colour,
-        size,
-      },
-    ];
-  });
+    return;
+  }
+
+  const { error } = await supabase
+    .from("wishlists")
+    .insert({
+      user_email: user.email,
+      product_name: productName,
+      colour,
+      size,
+    });
+
+  if (error) {
+    console.error(
+      "Error adding wishlist item:",
+      error
+    );
+    alert("Could not add to wishlist.");
+    return;
+  }
+
+  setWishlist((currentWishlist) => [
+    ...currentWishlist,
+    {
+      name: productName,
+      colour,
+      size,
+    },
+  ]);
 };
 
 
@@ -446,7 +552,11 @@ const toggleWishlist = (
           <div>
             <h3>{product.name}</h3>
             <p>{product.category}</p>
-            <strong>{product.price}</strong>
+         <strong>
+  Rs {Number(
+    String(product.price).replace(/[₹,Rs\s]/gi, "")
+  ).toLocaleString("en-IN")}
+</strong>
           </div>
         </div>
       ))}
@@ -517,7 +627,11 @@ const toggleWishlist = (
         <div className="cart-item-info">
           <h3>{product.name}</h3>
 
-          <p>{product.price}</p>
+          <p>
+  Rs {Number(
+    String(product.price).replace(/[₹,Rs\s]/gi, "")
+  ).toLocaleString("en-IN")}
+</p>
 
           <p>
             Size: <strong>{item.size}</strong>
@@ -621,11 +735,14 @@ return {
 
         if (!product) return total;
 
-        const price = Number(
-          product.price
-            .replace("₹", "")
-            .replace(",", "")
-        );
+       const price =
+  typeof product.price === "number"
+    ? product.price
+    : Number(
+        product.price
+          .replace("₹", "")
+          .replace(/,/g, "")
+      );
 
         return total + price * item.quantity;
       }, 0)
@@ -709,7 +826,11 @@ return {
 
                 <div className="wishlist-item-info">
                   <h3>{product.name}</h3>
-                  <p>{product.price}</p>
+                 <p>
+  Rs {Number(
+    String(product.price).replace(/[₹,Rs\s]/gi, "")
+  ).toLocaleString("en-IN")}
+</p>
                   <p className="wishlist-item-size">
   Size: {item.size}
 </p>
@@ -717,18 +838,15 @@ return {
   Colour: {item.colour || "Default"}
 </p>
 
-                  <button
-                    className="wishlist-remove"
-                    onClick={() =>
-                      setWishlist((currentWishlist) =>
-                        currentWishlist.filter(
-                          (wishlistItem) => wishlistItem !== item
-                        )
-                      )
-                    }
-                  >
-                    REMOVE
-                  </button>
+             <button
+  className="wishlist-remove"
+  onClick={(e) => {
+    e.stopPropagation();
+    toggleWishlist(item.name, item.size);
+  }}
+>
+  REMOVE
+</button>
                 </div>
               </div>
             );
@@ -897,39 +1015,39 @@ return {
     <span>SIZE</span>
 
     <div className="size-buttons">
-      {["M", "L", "XL", "XXL", "XXXL"].map((size) => {
-        const selectedColour =
-          selectedColours[product.name] ||
-          product.colours?.[0] ||
-          "Default";
+{getAvailableSizes(product).map((size) => {
+  const selectedColour =
+    selectedColours[product.name] ||
+    product.colours?.[0] ||
+    "Default";
 
-        const availableStock = getAvailableStock(
-          product.name,
-          selectedColour,
-          size
-        );
+  const availableStock = getAvailableStock(
+    product.name,
+    selectedColour,
+    size
+  );
 
-        return (
-          <button
-            key={size}
-            type="button"
-            disabled={availableStock === 0}
-            className={
-              selectedSizes[product.name] === size
-                ? "selected"
-                : ""
-            }
-            onClick={() =>
-              setSelectedSizes((current) => ({
-                ...current,
-                [product.name]: size,
-              }))
-            }
-          >
-            {size}
-          </button>
-        );
-      })}
+  return (
+    <button
+      key={size}
+      type="button"
+      disabled={availableStock === 0}
+      className={
+        selectedSizes[product.name] === size
+          ? "selected"
+          : ""
+      }
+      onClick={() =>
+        setSelectedSizes((current) => ({
+          ...current,
+          [product.name]: size,
+        }))
+      }
+    >
+      {size}
+    </button>
+  );
+})}
     </div>
 
     {selectedSizes[product.name] && (
@@ -948,14 +1066,19 @@ return {
 
 </div>
              <div className="product-bottom">
-  <strong>{product.price}</strong>
+<strong>
+  Rs {Number(
+    String(product.price).replace(/[₹,Rs\s]/gi, "")
+  ).toLocaleString("en-IN")}
+</strong>
 <button
   className="add-cart-btn"
   onClick={() =>
-    addToCart(
-      product.name,
-      selectedSizes[product.name] || "M"
-    )
+   addToCart(
+  product.name,
+  selectedSizes[product.name] ||
+    getAvailableSizes(product)[0]
+)
   }
 >
   ADD TO CART
@@ -1123,12 +1246,34 @@ wishlist.some(
             <a href="#contact">Contact</a>
             <a href="/shop">Shop</a>
           </div>
-
+    <div>
+      <h4>POLICIES</h4>
+      <a href="/exchange-return">Exchange & Return</a>
+      <a href="/shipping">Shipping & Delivery</a>
+      <a href="/privacy-policy">Privacy Policy</a>
+      <a href="/terms-conditions">Terms & Conditions</a>
+      <a href="/cancellation-refund">
+  Cancellation & Refund
+</a>
+    </div>
           <div>
             <h4>CONTACT</h4>
-            <p>WhatsApp Us</p>
-            <p>Instagram</p>
-            <p>India</p>
+
+            <a
+              href="https://wa.me/917888535887"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              WhatsApp Us
+            </a>
+
+            <a
+              href="https://www.instagram.com/eleganza_by_mittali"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Instagram
+            </a>
           </div>
         </div>
 

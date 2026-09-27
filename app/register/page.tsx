@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { supabase } from "../lib/supabase";
 
 
 export default function RegisterPage() {
@@ -14,54 +15,47 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
 const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const handleRegister = () => {
-    setError("");
+const handleRegister = async () => {
+  setError("");
 
-    if (!name || !email || !mobile || !password || !confirmPassword) {
-      setError("Please fill in all fields.");
-      return;
-    }
+  if (!name || !email || !mobile || !password || !confirmPassword) {
+    setError("Please fill in all fields.");
+    return;
+  }
 
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
+  if (password !== confirmPassword) {
+    setError("Passwords do not match.");
+    return;
+  }
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
+  if (password.length < 6) {
+    setError("Password must be at least 6 characters.");
+    return;
+  }
 
-    const existingUsers = JSON.parse(
-      localStorage.getItem("eleganza-users") || "[]"
-    );
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+    options: {
+      data: {
+        name: name.trim(),
+        mobile: mobile.trim(),
+      },
+    },
+  });
 
-    const userExists = existingUsers.some(
-      (user: { email: string }) =>
-        user.email.toLowerCase() === email.toLowerCase()
-    );
+  if (error) {
+    setError(error.message);
+    return;
+  }
 
-    if (userExists) {
-      setError("An account with this email already exists.");
-      return;
-    }
+  if (!data.user) {
+    setError("Unable to create your account. Please try again.");
+    return;
+  }
 
-    const newUser = {
-      name,
-      email,
-      mobile,
-      password,
-    };
-
-    existingUsers.push(newUser);
-
-    localStorage.setItem(
-      "eleganza-users",
-      JSON.stringify(existingUsers)
-    );
-
-    window.location.href = "/login";
-  };
+  window.location.href = "/login";
+};
 
   return (
     <main className="auth-page">

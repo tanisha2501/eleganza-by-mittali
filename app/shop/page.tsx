@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { products } from "../lib/products";
+import { supabase } from "../lib/supabase";
 
 type Product = {
   name: string;
@@ -10,60 +11,62 @@ type Product = {
   image?: string;
   images?: string[];
   description: string;
-  sizes?: Record<string, number>;
+  sizes?:
+  | Record<string, number>
+  | Record<string, Record<string, number>>;
 };
 
 const categories = [
   "All",
-  "Farshi Suit",
-  "Cord Set",
-  "Suit",
+  "Farshi Suits",
+  "Cord Sets",
+  "Suits",
   "Anarkali",
-  "Pakistani Suit",
-  "Sharara Set",
+  "Pakistani Suits",
+  "Sharara Sets",
 ];
 
 export default function ShopPage() {
-  const [allProducts, setAllProducts] =
-    useState<Product[]>(products);
+const [allProducts, setAllProducts] =
+  useState<Product[]>([]);
+
+const [productsLoading, setProductsLoading] =
+  useState(true);
 
   const [selectedCategory, setSelectedCategory] =
     useState("All");
 
-  useEffect(() => {
-    const loadProducts = () => {
-      const savedProducts = localStorage.getItem(
-        "eleganza-products"
+useEffect(() => {
+  const loadProducts = async () => {
+    setProductsLoading(true);
+
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("id", { ascending: true });
+
+    if (error) {
+      console.error(
+        "Error loading products:",
+        error
       );
 
-      if (savedProducts) {
-        const savedData = JSON.parse(savedProducts);
+      setAllProducts(products);
+      setProductsLoading(false);
+      return;
+    }
 
-        setAllProducts([
-          ...products,
-          ...savedData,
-        ]);
-      } else {
-        setAllProducts(products);
-      }
-    };
+    if (data && data.length > 0) {
+      setAllProducts(data);
+    } else {
+      setAllProducts(products);
+    }
 
-    loadProducts();
+    setProductsLoading(false);
+  };
 
-    window.addEventListener("storage", loadProducts);
-    window.addEventListener("focus", loadProducts);
-
-    return () => {
-      window.removeEventListener(
-        "storage",
-        loadProducts
-      );
-      window.removeEventListener(
-        "focus",
-        loadProducts
-      );
-    };
-  }, []);
+  loadProducts();
+}, []);
 
   useEffect(() => {
     const params = new URLSearchParams(
@@ -77,13 +80,18 @@ export default function ShopPage() {
     }
   }, []);
 
-  const filteredProducts =
-    selectedCategory === "All"
-      ? allProducts
-      : allProducts.filter(
-          (product) =>
-            product.category === selectedCategory
-        );
+const filteredProducts =
+  selectedCategory === "All"
+    ? allProducts
+    : allProducts.filter(
+        (product) =>
+          product.category
+            .toLowerCase()
+            .replace(/s$/, "") ===
+          selectedCategory
+            .toLowerCase()
+            .replace(/s$/, "")
+      );
 
   return (
     <main className="shop-page">
@@ -153,7 +161,7 @@ export default function ShopPage() {
       {/* PRODUCTS */}
       <section className="shop-products">
 
-        {filteredProducts.length === 0 ? (
+        {!productsLoading && filteredProducts.length === 0 ?(
           <div className="shop-empty">
             <h2>No Products Found</h2>
             <p>
@@ -194,9 +202,11 @@ export default function ShopPage() {
 
                   <h3>{product.name}</h3>
 
-                  <strong>
-                    {product.price}
-                  </strong>
+                 <strong>
+  Rs {Number(
+    String(product.price).replace(/[₹,Rs\s]/gi, "")
+  ).toLocaleString("en-IN")}
+</strong>
 
                 </div>
 

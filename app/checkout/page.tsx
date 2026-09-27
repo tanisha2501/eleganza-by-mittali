@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Script from "next/script";
 import { products as defaultProducts } from "../lib/products";
+import { supabase } from "../lib/supabase";
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 type CartItem = {
   name: string;
@@ -9,12 +17,23 @@ type CartItem = {
   size: string;
   quantity: number;
 };
-
+type Product = {
+  name: string;
+  category: string;
+  price: string | number;
+  image?: string;
+  images?: string[];
+  description: string;
+  colours?: string[];
+  sizes?:
+    | Record<string, number>
+    | Record<string, Record<string, number>>;
+};
 
 export default function CheckoutPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [allProducts, setAllProducts] =
-  useState(defaultProducts);
+const [allProducts, setAllProducts] =
+  useState<Product[]>(defaultProducts);
   const [customerName, setCustomerName] = useState("");
 const [mobile, setMobile] = useState("");
 const [email, setEmail] = useState("");
@@ -23,26 +42,71 @@ const [area, setArea] = useState("");
 const [city, setCity] = useState("");
 const [pincode, setPincode] = useState("");
 const [state, setState] = useState("");
+const [paymentMethod, setPaymentMethod] =
+  useState<"online" | "cod">("online");
 
- useEffect(() => {
-  const savedCart = localStorage.getItem("eleganza-cart");
+  useEffect(() => {
+  const checkAuth = async () => {
+    const { data } = await supabase.auth.getUser();
 
-  if (savedCart) {
-    setCart(JSON.parse(savedCart));
+    if (!data.user) {
+      localStorage.setItem(
+        "eleganza-checkout-redirect",
+        "true"
+      );
+
+      window.location.href = "/login";
+    }
+  };
+
+  checkAuth();
+}, []);
+
+useEffect(() => {
+const loadCheckoutData = async () => {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    localStorage.setItem(
+      "eleganza-checkout-redirect",
+      "true"
+    );
+
+    window.location.href = "/login";
+    return;
   }
 
-  const savedProducts = localStorage.getItem(
-    "eleganza-products"
-  );
+  const savedCart =
+    localStorage.getItem("eleganza-cart");
 
-  if (savedProducts) {
-    const savedData = JSON.parse(savedProducts);
+    if (savedCart) {
+      setCart(JSON.parse(savedCart));
+    }
 
-    setAllProducts([
-      ...defaultProducts,
-      ...savedData,
-    ]);
-  }
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("id", { ascending: true });
+
+    if (error) {
+      console.error(
+        "Error loading products:",
+        error
+      );
+      setAllProducts(defaultProducts);
+      return;
+    }
+
+    if (data && data.length > 0) {
+      setAllProducts(data);
+    } else {
+      setAllProducts(defaultProducts);
+    }
+  };
+
+  loadCheckoutData();
 }, []);
 
 const total = cart.reduce((sum, item) => {
@@ -52,16 +116,19 @@ const total = cart.reduce((sum, item) => {
 
   if (!product) return sum;
 
-  const price = Number(
-    product.price
-      .replace("₹", "")
-      .replace(",", "")
-  );
+ const price =
+  typeof product.price === "number"
+    ? product.price
+    : Number(
+        product.price
+          .replace("₹", "")
+          .replace(/,/g, "")
+      );
 
   return sum + price * item.quantity;
 }, 0);
 
- const handlePlaceOrder = () => {
+const handlePlaceOrder = async () => {
   if (
     !customerName ||
     !mobile ||
@@ -80,172 +147,211 @@ const total = cart.reduce((sum, item) => {
     alert("Your cart is empty.");
     return;
   }
-  const savedStock = localStorage.getItem("eleganza-stock");
 
-const stockData = savedStock
-  ? JSON.parse(savedStock)
-  : {
-      "The Royal Farshi": {
-        M: 10,
-        L: 10,
-        XL: 10,
-        XXL: 10,
-        XXXL: 10,
-      },
-      "Blush Cord Set": {
-        M: 10,
-        L: 10,
-        XL: 10,
-        XXL: 10,
-        XXXL: 10,
-      },
-      "Ivory Elegance": {
-        M: 10,
-        L: 10,
-        XL: 10,
-        XXL: 10,
-        XXXL: 10,
-      },
-      "Midnight Anarkali": {
-        M: 10,
-        L: 10,
-        XL: 10,
-        XXL: 10,
-        XXXL: 10,
-      },
-    };
-
-for (const item of cart) {
-  const productStock =
-    stockData[item.name];
-
-  let availableStock = 0;
-
-  if (
-    productStock &&
-    productStock[
-      item.colour || "Default"
-    ] &&
-    typeof productStock[
-      item.colour || "Default"
-    ] === "object"
-  ) {
-    availableStock =
-      productStock[
-        item.colour || "Default"
-      ][item.size] ?? 0;
-  } else {
-    availableStock =
-      productStock?.[item.size] ?? 0;
-  }
-
-  if (
-    item.quantity >
-    availableStock
-  ) {
-    alert(
-      `${item.name} (${item.colour || "Default"}, ${item.size}) has only ${availableStock} item(s) left in stock.`
-    );
-    return;
-  }
-}
-  const orderNumber =
-    "ELG-" +
-    Math.floor(100000 + Math.random() * 900000);
-
-  const newOrder = {
-    orderNumber: orderNumber,
-
-    customer: {
-      name: customerName,
-      mobile: mobile,
-      email: email,
-      address: address,
-      area: area,
-      city: city,
-      pincode: pincode,
-      state: state,
-    },
-
-    items: cart,
-
-    total: total,
-
-    date: new Date().toLocaleString("en-IN"),
-
-    status: "Pending",
-  };
-
-  const savedOrders =
-    localStorage.getItem("eleganza-orders");
-
-  const currentOrders = savedOrders
-    ? JSON.parse(savedOrders)
-    : [];
-
-  currentOrders.push(newOrder);
-
-  localStorage.setItem(
-    "eleganza-orders",
-    JSON.stringify(currentOrders)
-  );
-  localStorage.setItem(
-  "eleganza-last-order",
-  orderNumber
-);
-
-cart.forEach((item) => {
-  const productStock =
-    stockData[item.name];
-
-  if (!productStock) return;
-
-  const selectedColour =
-    item.colour || "Default";
-
-  if (
-    productStock[selectedColour] &&
-    typeof productStock[
-      selectedColour
-    ] === "object"
-  ) {
-    productStock[
-      selectedColour
-    ][item.size] = Math.max(
-      0,
-      productStock[
-        selectedColour
-      ][item.size] -
-        item.quantity
-    );
-  } else if (
-    productStock[item.size] !==
-    undefined
-  ) {
-    /*
-     * Old size-only products
-     */
-    productStock[item.size] =
-      Math.max(
-        0,
-        productStock[item.size] -
-          item.quantity
+  try {
+    if (paymentMethod === "online") {
+      const razorpayResponse = await fetch(
+        "/api/razorpay/create-order",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            items: cart,
+          }),
+        }
       );
+
+      const razorpayResult = await razorpayResponse.json();
+
+      if (!razorpayResponse.ok) {
+        alert(
+          razorpayResult.error ||
+            "Unable to start online payment."
+        );
+        return;
+      }
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: razorpayResult.amount,
+        currency: razorpayResult.currency,
+        name: "Eleganza by Mittali",
+        description: "Fashion Order",
+        order_id: razorpayResult.orderId,
+
+        prefill: {
+          name: customerName,
+          email: email,
+          contact: mobile,
+        },
+
+        theme: {
+          color: "#d16b86",
+        },
+
+        handler: async function (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) {
+          try {
+            const orderResponse = await fetch(
+              "/api/orders",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  customer_name: customerName,
+                  customer_email: email,
+                  customer_mobile: mobile,
+                  address: address,
+                  area: area,
+                  city: city,
+                  pincode: pincode,
+                  state: state,
+                  items: cart,
+                  payment_method: "online",
+                  razorpay_payment_id:
+                    response.razorpay_payment_id,
+                  razorpay_order_id:
+                    response.razorpay_order_id,
+                  razorpay_signature:
+                    response.razorpay_signature,
+                }),
+              }
+            );
+
+            const orderResult =
+              await orderResponse.json();
+
+            if (!orderResponse.ok) {
+              alert(
+                orderResult.error ||
+                  "Payment succeeded but order creation failed. Please contact support."
+              );
+              return;
+            }
+
+            const orderNumber =
+              orderResult.order?.order_number ||
+              orderResult.order_number;
+
+            localStorage.setItem(
+              "eleganza-last-order",
+              orderNumber
+            );
+
+            localStorage.removeItem(
+              "eleganza-cart"
+            );
+
+            alert(
+              "Payment successful and order placed! 🎉"
+            );
+
+            window.location.href =
+              "/order-success";
+          } catch (error) {
+            console.error(
+              "Online order error:",
+              error
+            );
+
+            alert(
+              "Payment was successful, but we could not create the order. Please contact support."
+            );
+          }
+        },
+
+        modal: {
+          ondismiss: function () {
+            console.log(
+              "Razorpay payment window closed."
+            );
+          },
+        },
+      };
+
+      if (
+        !process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID
+      ) {
+        alert(
+          "Razorpay is not configured correctly."
+        );
+        return;
+      }
+
+   const razorpay = new window.Razorpay(options);
+
+      razorpay.open();
+
+      return;
+    }
+
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customer_name: customerName,
+        customer_email: email,
+        customer_mobile: mobile,
+        address: address,
+        area: area,
+        city: city,
+        pincode: pincode,
+        state: state,
+        items: cart,
+        payment_method: "cod",
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      alert(
+        result.error ||
+          "Order could not be placed. Please try again."
+      );
+      return;
+    }
+
+    const orderNumber =
+      result.order?.order_number ||
+      result.order_number;
+
+    localStorage.setItem(
+      "eleganza-last-order",
+      orderNumber
+    );
+
+    localStorage.removeItem(
+      "eleganza-cart"
+    );
+
+    alert("Order placed successfully! 🎉");
+
+    window.location.href =
+      "/order-success";
+  } catch (error) {
+    console.error("Order error:", error);
+
+    alert(
+      "Something went wrong while placing your order."
+    );
   }
-});
-localStorage.setItem(
-  "eleganza-stock",
-  JSON.stringify(stockData)
-);
-
-localStorage.removeItem("eleganza-cart");
-
-window.location.href = "/order-success";
-  
 };
-
   return (
     <main className="checkout-page">
+      <Script
+  src="https://checkout.razorpay.com/v1/checkout.js"
+  strategy="afterInteractive"
+/>
 
       <div className="checkout-container">
 
@@ -327,20 +433,25 @@ window.location.href = "/order-success";
             <h2>Payment</h2>
 
             <div className="payment-option">
-              <input
-                type="radio"
-                name="payment"
-                defaultChecked
-              />
+           <input
+  type="radio"
+  name="payment"
+  value="online"
+  checked={paymentMethod === "online"}
+  onChange={() => setPaymentMethod("online")}
+/>
 
               <span>Online Payment</span>
             </div>
 
             <div className="payment-option">
-              <input
-                type="radio"
-                name="payment"
-              />
+            <input
+  type="radio"
+  name="payment"
+  value="cod"
+  checked={paymentMethod === "cod"}
+  onChange={() => setPaymentMethod("cod")}
+/>
 
               <span>Cash on Delivery</span>
             </div>
@@ -390,17 +501,17 @@ window.location.href = "/order-success";
 </p>
                     </div>
 
-                    <strong>
-                      ₹
-                      {(
-                        Number(
-                          product.price
-                            .replace("₹", "")
-                            .replace(",", "")
-                        ) * item.quantity
-                      ).toLocaleString("en-IN")}
-                    </strong>
-                  </div>
+      <strong>
+  Rs {(
+    (typeof product.price === "number"
+      ? product.price
+      : Number(
+          product.price
+            .replace("₹", "")
+            .replace(/,/g, "")
+        )) * item.quantity
+  ).toLocaleString("en-IN")}
+</strong>       </div>
                 );
               })
             )}
@@ -411,8 +522,8 @@ window.location.href = "/order-success";
             <span>Total</span>
 
             <strong>
-              ₹{total.toLocaleString("en-IN")}
-            </strong>
+  Rs {total.toLocaleString("en-IN")}
+</strong>
           </div>
 
          <button

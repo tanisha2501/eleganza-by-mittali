@@ -1,14 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { supabase } from "../../../lib/supabase";
 
-const sizes = [
-  "M",
-  "L",
-  "XL",
-  "XXL",
-  "XXXL",
-] as const;
 
 export default function EditProductPage() {
   const [productName, setProductName] =
@@ -25,6 +19,9 @@ export default function EditProductPage() {
 
   const [colours, setColours] =
     useState<string[]>(["Default"]);
+  const [sizes, setSizes] = useState<string[]>([]);
+
+  const [newSize, setNewSize] = useState("");
 
   const [newColour, setNewColour] =
     useState("");
@@ -44,7 +41,8 @@ export default function EditProductPage() {
   const [images, setImages] =
     useState<string[]>([]);
 
-  useEffect(() => {
+ useEffect(() => {
+  const loadProduct = async () => {
     const params =
       new URLSearchParams(
         window.location.search
@@ -54,33 +52,33 @@ export default function EditProductPage() {
 
     if (!name) return;
 
-    const savedProducts =
-      localStorage.getItem(
-        "eleganza-products"
-      );
+    const { data: product, error } =
+  await supabase
+    .from("products")
+    .select("*")
+    .eq("name", name)
+    .single();
 
-    if (!savedProducts) return;
+if (error || !product) {
+  console.error(
+    "Error loading product:",
+    error
+  );
 
-    const products =
-      JSON.parse(savedProducts);
-
-    const product = products.find(
-      (item: { name: string }) =>
-        item.name === name
-    );
-
-    if (!product) return;
+  alert("Product could not be loaded.");
+  return;
+}
 
     setProductName(product.name);
 
     setCategory(product.category);
 
-    setPrice(
-      product.price.replace(
-        /[₹,]/g,
-        ""
-      )
-    );
+  setPrice(
+  String(product.price).replace(
+    /[₹,]/g,
+    ""
+  )
+);
 
     setDescription(
       product.description
@@ -107,119 +105,84 @@ export default function EditProductPage() {
     /*
      * Load colour-wise stock
      */
-    const savedStock =
-      localStorage.getItem(
-        "eleganza-stock"
-      );
 
-    if (savedStock) {
-      const stockData =
-        JSON.parse(savedStock);
+const productSizes = product.sizes;
 
-      const productStock =
-        stockData[product.name];
+if (
+  productSizes &&
+  typeof productSizes === "object"
+) {
+  const allSizes = Array.from(
+  new Set(
+    Object.values(productSizes).flatMap(
+      (colourStock) =>
+        Object.keys(
+          colourStock as Record<string, number>
+        )
+    )
+  )
+);
 
-      /*
-       * New colour-wise format
-       */
-      if (
-        productStock &&
-        typeof Object.values(
-          productStock
-        )[0] === "object"
-      ) {
-        setStock(productStock);
-      }
+setSizes(allSizes);
+  const firstValue =
+    Object.values(productSizes)[0];
 
-      /*
-       * Old size-only format
-       */
-      else {
-        setStock({
-          Default: {
-            M:
-              productStock?.M ??
-              product.sizes?.M ??
-              0,
+  if (
+    firstValue &&
+    typeof firstValue === "object"
+  ) {
+    setStock(
+      productSizes as Record<
+        string,
+        Record<string, number>
+      >
+    );
+  } else {
+    setStock({
+      Default: {
+        M:
+          Number(
+            (productSizes as Record<string, number>).M
+          ) || 0,
+        L:
+          Number(
+            (productSizes as Record<string, number>).L
+          ) || 0,
+        XL:
+          Number(
+            (productSizes as Record<string, number>).XL
+          ) || 0,
+        XXL:
+          Number(
+            (productSizes as Record<string, number>).XXL
+          ) || 0,
+        XXXL:
+          Number(
+            (productSizes as Record<string, number>).XXXL
+          ) || 0,
+      },
+    });
+  }
+       }
+  };
 
-            L:
-              productStock?.L ??
-              product.sizes?.L ??
-              0,
-
-            XL:
-              productStock?.XL ??
-              product.sizes?.XL ??
-              0,
-
-            XXL:
-              productStock?.XXL ??
-              product.sizes?.XXL ??
-              0,
-
-            XXXL:
-              productStock?.XXXL ??
-              product.sizes?.XXXL ??
-              0,
-          },
-        });
-      }
-    } else {
-      /*
-       * Fallback to product sizes
-       */
-      setStock({
-        Default: {
-          M:
-            product.sizes?.M ??
-            0,
-
-          L:
-            product.sizes?.L ??
-            0,
-
-          XL:
-            product.sizes?.XL ??
-            0,
-
-          XXL:
-            product.sizes?.XXL ??
-            0,
-
-          XXXL:
-            product.sizes?.XXXL ??
-            0,
-        },
-      });
-    }
-  }, []);
+  loadProduct();
+}, []);
 
   const addColour = () => {
-    const colour =
-      newColour.trim();
+    const colour = newColour.trim();
 
     if (!colour) return;
 
-    if (
-      colours.some(
-        (existingColour) =>
-          existingColour.toLowerCase() ===
-          colour.toLowerCase()
-      )
-    ) {
-      alert(
-        "This colour already exists."
-      );
+    if (colours.includes(colour)) {
+      alert("This colour already exists.");
       return;
     }
 
-    setColours((current) => [
-      ...current,
-      colour,
-    ]);
+    setColours((prev) => [...prev, colour]);
 
-    setStock((current) => ({
-      ...current,
+    setStock((prev) => ({
+      ...prev,
       [colour]: {
         M: 0,
         L: 0,
@@ -231,158 +194,147 @@ export default function EditProductPage() {
 
     setNewColour("");
   };
+  const addSize = () => {
+  const size = newSize.trim();
 
-  const removeColour = (
-    colour: string
-  ) => {
-    if (colours.length === 1) {
-      alert(
-        "At least one colour is required."
-      );
-      return;
-    }
+  if (!size) return;
 
-    setColours((current) =>
-      current.filter(
-        (item) => item !== colour
-      )
-    );
+  if (
+    sizes.some(
+      (existingSize) =>
+        existingSize.toLowerCase() === size.toLowerCase()
+    )
+  ) {
+    alert("This size already exists.");
+    return;
+  }
 
-    setStock((current) => {
-      const updated = {
-        ...current,
+  setSizes((current) => [...current, size]);
+
+  setStock((current) => {
+    const updatedStock = { ...current };
+
+    colours.forEach((colour) => {
+      updatedStock[colour] = {
+        ...(updatedStock[colour] || {}),
+        [size]: 0,
+      };
+    });
+
+    return updatedStock;
+  });
+
+  setNewSize("");
+};
+
+const removeSize = (sizeToRemove: string) => {
+  if (sizes.length === 1) {
+    alert("At least one size is required.");
+    return;
+  }
+
+  setSizes((current) =>
+    current.filter((size) => size !== sizeToRemove)
+  );
+
+  setStock((current) => {
+    const updatedStock = { ...current };
+
+    Object.keys(updatedStock).forEach((colour) => {
+      const colourStock = {
+        ...updatedStock[colour],
       };
 
-      delete updated[colour];
+      delete colourStock[sizeToRemove];
 
+      updatedStock[colour] = colourStock;
+    });
+
+    return updatedStock;
+  });
+};
+
+  const removeColour = (colourToRemove: string) => {
+    if (colours.length === 1) return;
+
+    setColours((prev) =>
+      prev.filter((colour) => colour !== colourToRemove)
+    );
+
+    setStock((prev) => {
+      const updated = { ...prev };
+      delete updated[colourToRemove];
       return updated;
     });
   };
 
   const handleStockChange = (
     colour: string,
-    size: (typeof sizes)[number],
+    size: string,
     value: string
   ) => {
-    setStock((current) => ({
-      ...current,
+    const numericValue = Math.max(
+      0,
+      Number(value) || 0
+    );
 
+    setStock((prev) => ({
+      ...prev,
       [colour]: {
-        ...current[colour],
-
-        [size]: Math.max(
-          0,
-          Number(value)
-        ),
+        ...prev[colour],
+        [size]: numericValue,
       },
     }));
   };
 
-  const handleSubmit = (
+  const handleSubmit = async (
     e: React.FormEvent
   ) => {
     e.preventDefault();
 
-    if (
-      !productName ||
-      !price ||
-      !description ||
-      images.length === 0
-    ) {
+    const originalName = new URLSearchParams(
+      window.location.search
+    ).get("name");
+
+    if (!originalName) {
+      alert("Product could not be identified.");
+      return;
+    }
+
+    const slug = productName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    const { error } = await supabase
+      .from("products")
+      .update({
+        name: productName.trim(),
+        slug,
+        category,
+        price: Number(price),
+        description,
+        image: images[0] || "",
+        images,
+        colours,
+        sizes: stock,
+      })
+      .eq("name", originalName);
+
+    if (error) {
+      console.error(
+        "Error updating product:",
+        error
+      );
       alert(
-        "Please fill all required fields."
+        "Product update failed. Please try again."
       );
       return;
     }
 
-    const savedProducts =
-      localStorage.getItem(
-        "eleganza-products"
-      );
-
-    const existingProducts =
-      savedProducts
-        ? JSON.parse(savedProducts)
-        : [];
-
-    const updatedProducts =
-      existingProducts.map(
-        (product: {
-          name: string;
-        }) => {
-          if (
-            product.name !==
-            productName
-          ) {
-            return product;
-          }
-
-          return {
-            ...product,
-
-            name:
-              productName.trim(),
-
-            category,
-
-            price:
-              `₹${Number(
-                price
-              ).toLocaleString(
-                "en-IN"
-              )}`,
-
-            image: images[0],
-
-            images,
-
-            description:
-              description.trim(),
-
-            colours,
-
-            sizes: stock,
-          };
-        }
-      );
-
-    localStorage.setItem(
-      "eleganza-products",
-      JSON.stringify(
-        updatedProducts
-      )
-    );
-
-    const savedStock =
-      localStorage.getItem(
-        "eleganza-stock"
-      );
-
-    const existingStock =
-      savedStock
-        ? JSON.parse(savedStock)
-        : {};
-
-    const updatedStock = {
-      ...existingStock,
-
-      [productName]:
-        stock,
-    };
-
-    localStorage.setItem(
-      "eleganza-stock",
-      JSON.stringify(
-        updatedStock
-      )
-    );
-
-    alert(
-      "Product updated successfully! 🎉"
-    );
-
-    window.location.href =
-      "/admin/orders";
+    alert("Product updated successfully!");
+    window.location.href = "/admin/orders";
   };
 
   return (
@@ -541,66 +493,55 @@ export default function EditProductPage() {
               type="file"
               accept="image/*"
               multiple
-              onChange={(e) => {
+            onChange={async (e) => {
+              const files = Array.from(e.target.files || []);
 
-                const files =
-                  Array.from(
-                    e.target.files ||
-                      []
-                  );
+              if (files.length === 0) return;
 
-                if (
-                  files.length ===
-                  0
-                ) {
-                  return;
+              try {
+                const uploadedImages: string[] = [];
+
+                for (const file of files) {
+                  const fileExt = file.name.split(".").pop();
+                  const fileName = `${Date.now()}-${Math.random()
+                    .toString(36)
+                    .substring(2, 10)}.${fileExt}`;
+
+                  const filePath = `products/${fileName}`;
+
+                  const { error: uploadError } = await supabase.storage
+                    .from("product-images")
+                    .upload(filePath, file, {
+                      cacheControl: "3600",
+                      upsert: false,
+                    });
+                    
+                  if (uploadError) {
+                    console.error("Image upload error:", uploadError);
+                    alert("Image upload failed. Please try again.");
+                    return;
+                  }
+
+                  const { data } = supabase.storage
+                    .from("product-images")
+                    .getPublicUrl(filePath);
+
+                  if (data.publicUrl) {
+                    uploadedImages.push(data.publicUrl);
+                  }
                 }
 
-                Promise.all(
-                  files.map(
-                    (file) =>
-                      new Promise<string>(
-                        (
-                          resolve
-                        ) => {
-
-                          const reader =
-                            new FileReader();
-
-                          reader.onloadend =
-                            () => {
-
-                              resolve(
-                                reader.result as string
-                              );
-
-                            };
-
-                          reader.readAsDataURL(
-                            file
-                          );
-
-                        }
-                      )
-                  )
-                ).then(
-                  (
-                    newImages
-                  ) => {
-
-                    setImages(
-                      (
-                        currentImages
-                      ) => [
-                        ...currentImages,
-                        ...newImages,
-                      ]
-                    );
-
-                  }
-                );
-
-              }}
+                setImages((currentImages) => [
+                  ...currentImages,
+                  ...uploadedImages,
+                ]);
+              } catch (error) {
+                console.error("Image upload error:", error);
+                alert("Image upload failed. Please try again.");
+              } finally {
+                e.target.value = "";
+              }
+            }}
             />
 
             {images.length >
@@ -805,6 +746,95 @@ export default function EditProductPage() {
             </p>
 
           </div>
+          {/* PRODUCT SIZES */}
+
+<div className="form-group">
+
+  <label>PRODUCT SIZES</label>
+
+  <div
+    style={{
+      display: "flex",
+      gap: "10px",
+      marginBottom: "15px",
+      flexWrap: "wrap",
+    }}
+  >
+    <input
+      type="text"
+      placeholder="e.g. S, M, L, Free Size, 36"
+      value={newSize}
+      onChange={(e) => setNewSize(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          addSize();
+        }
+      }}
+    />
+
+    <button
+      type="button"
+      onClick={addSize}
+      className="edit-product-btn"
+    >
+      + ADD SIZE
+    </button>
+  </div>
+
+  <div
+    style={{
+      display: "flex",
+      gap: "10px",
+      flexWrap: "wrap",
+    }}
+  >
+    {sizes.map((size) => (
+      <div
+        key={size}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "8px 12px",
+          border: "1px solid #173847",
+          color: "#173847",
+          fontSize: "12px",
+          letterSpacing: "0.8px",
+        }}
+      >
+        <span>{size}</span>
+
+        {sizes.length > 1 && (
+          <button
+            type="button"
+            onClick={() => removeSize(size)}
+            style={{
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontSize: "16px",
+              color: "#173847",
+            }}
+          >
+            ×
+          </button>
+          )}
+        </div>
+      ))}
+        </div>
+
+        <p
+          style={{
+            marginTop: "10px",
+            fontSize: "12px",
+            color: "#777",
+          }}
+        >
+          Add only the sizes available for this product.
+        </p>
+
+      </div>
 
           {/* COLOUR + SIZE STOCK */}
 
