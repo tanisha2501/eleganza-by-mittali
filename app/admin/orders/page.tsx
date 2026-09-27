@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
 type Order = {
@@ -48,7 +47,6 @@ type SavedProduct = {
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const searchParams = useSearchParams();
 
   const [highlightedOrder, setHighlightedOrder] =
     useState<string | null>(null);
@@ -207,8 +205,8 @@ setProductColours(formattedColours);
   loadOrders();
 }, []);
 useEffect(() => {
-  const orderNumber =
-    searchParams.get("order");
+const orderNumber =
+  new URLSearchParams(window.location.search).get("order");
 
   if (!orderNumber || orders.length === 0) {
     return;
@@ -244,7 +242,7 @@ useEffect(() => {
   }, 3000);
 
   return () => clearTimeout(timer);
-}, [searchParams, orders]);
+},[orders]);
 
   const updateOrderStatus = async (
   orderNumber: string,
