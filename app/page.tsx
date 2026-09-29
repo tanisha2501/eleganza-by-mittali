@@ -50,6 +50,8 @@ type Product = {
 };
 
 export default function Home() {
+const [email, setEmail] = useState("");
+const [subscribed, setSubscribed] = useState(false);
 type CartItem = {
   name: string;
   colour?: string;
@@ -1206,13 +1208,42 @@ wishlist.some(
         <p className="small-heading">STAY CONNECTED</p>
         <h2>Be the first to discover what's new.</h2>
 
-        <div className="newsletter-form">
-          <input
-            type="email"
-            placeholder="Enter your email address"
-          />
-          <button>SUBSCRIBE</button>
-        </div>
+      <div className="newsletter-form">
+  <input
+    type="email"
+    placeholder="Enter your email address"
+    value={email}
+    onChange={(e) => {
+      setEmail(e.target.value);
+      setSubscribed(false);
+    }}
+  />
+
+  <button
+    onClick={() => {
+      if (!email.trim()) {
+        alert("Please enter your email address.");
+        return;
+      }
+
+      if (!email.includes("@") || !email.includes(".")) {
+        alert("Please enter a valid email address.");
+        return;
+      }
+
+      setSubscribed(true);
+      setEmail("");
+    }}
+  >
+    SUBSCRIBE
+  </button>
+
+  {subscribed && (
+    <p style={{ marginTop: "10px" }}>
+      Thank you for subscribing! ❤️
+    </p>
+  )}
+</div>
       </section>
 
       {/* FOOTER */}
