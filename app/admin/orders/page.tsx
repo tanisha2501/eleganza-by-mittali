@@ -15,15 +15,21 @@ type Order = {
     pincode: string;
     state: string;
   };
-  items: {
-    name: string;
-    colour?: string;
-    size: string;
-    quantity: number;
-  }[];
+items: {
+  name: string;
+  colour: string;
+  size: string;
+  quantity: number;
+  price?: number | string;
+}[];
   total: number;
   date: string;
   status: string;
+  shiprocket_order_id?: number | null;
+shiprocket_shipment_id?: number | null;
+shiprocket_awb_code?: string | null;
+shiprocket_courier_name?: string | null;
+shiprocket_status?: string | null;
   paymentMethod: string;
 };
 
@@ -128,6 +134,7 @@ if (ordersError) {
   const formattedOrders: Order[] =
     ordersData.map((order) => ({
       orderNumber: order.order_number,
+
       customer: {
         name: order.customer_name,
         mobile: order.customer_mobile,
@@ -146,6 +153,13 @@ date: new Date(
 ).toLocaleString("en-IN"),
 status: order.status || "Pending",
 paymentMethod: order.payment_method || "cod",
+
+shiprocket_order_id: order.shiprocket_order_id,
+shiprocket_shipment_id: order.shiprocket_shipment_id,
+shiprocket_awb_code: order.shiprocket_awb_code,
+shiprocket_courier_name: order.shiprocket_courier_name,
+shiprocket_status: order.shiprocket_status,
+shiprocket_tracking_url: order.shiprocket_tracking_url,
     }));
 
   setOrders(formattedOrders);
@@ -243,7 +257,177 @@ const orderNumber =
 
   return () => clearTimeout(timer);
 },[orders]);
+const handleShipNow = async (order: Order) => {
+  try {
+    if (order.shiprocket_order_id) {
+      alert("This order is already shipped to Shiprocket.");
+      return;
+    }
 
+    const orderItems = order.items.map((item) => ({
+      name: item.name,
+      sku: item.name
+        .toLowerCase()
+        .replace(/\s+/g, "-"),
+      units: item.quantity,
+      selling_price: Number(
+        String(item.price || 0).replace(/[₹,]/g, "")
+      ),
+      discount: 0,
+      tax: 0,
+      hsn: "",
+    }));
+
+      const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      alert("Admin session expired. Please login again.");
+      window.location.href = "/admin/login";
+      return;
+    }
+
+    const response = await fetch("/api/shiprocket/create-order", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+        body: JSON.stringify({
+          order_id: order.orderNumber,
+          order_date: new Date().toISOString(),
+
+          billing_customer_name:
+            order.customer.name,
+
+          billing_last_name: "",
+
+          billing_address:
+            order.customer.address,
+
+          billing_city:
+            order.customer.city,
+
+          billing_pincode:
+            order.customer.pincode,
+
+          billing_state:
+            order.customer.state,
+
+          billing_country: "India",
+
+          billing_email:
+            order.customer.email,
+
+          billing_phone:
+            order.customer.mobile,
+
+          shipping_is_billing: true,
+
+          shipping_customer_name:
+            order.customer.name,
+
+          shipping_last_name: "",
+
+          shipping_address:
+            order.customer.address,
+
+          shipping_city:
+            order.customer.city,
+
+          shipping_pincode:
+            order.customer.pincode,
+
+          shipping_state:
+            order.customer.state,
+
+          shipping_country: "India",
+
+          shipping_email:
+            order.customer.email,
+
+          shipping_phone:
+            order.customer.mobile,
+
+          order_items: orderItems,
+
+          payment_method:
+            order.paymentMethod === "online"
+              ? "Prepaid"
+              : "COD",
+
+          sub_total: Number(order.total),
+
+          length: 20,
+          breadth: 15,
+          height: 10,
+          weight: 0.5,
+        }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      console.error(
+        "Shiprocket error:",
+        result
+      );
+
+      alert(
+        result.error ||
+          "Shiprocket order creation failed."
+      );
+
+      return;
+    }
+
+  alert(
+  "🚚 Shiprocket order created successfully! AWB will be assigned when shipping is arranged."
+);
+    // Update UI immediately
+    setOrders((currentOrders) =>
+      currentOrders.map((currentOrder) =>
+        currentOrder.orderNumber ===
+        order.orderNumber
+          ? {
+              ...currentOrder,
+
+              shiprocket_order_id:
+                result.data
+                  ?.shiprocket_order_id ?? null,
+
+              shiprocket_shipment_id:
+                result.data
+                  ?.shiprocket_shipment_id ?? null,
+
+              shiprocket_awb_code:
+                result.data
+                  ?.shiprocket_awb_code ?? null,
+
+              shiprocket_courier_name:
+                result.data
+                  ?.shiprocket_courier_name ?? null,
+
+              shiprocket_status:
+                result.data
+                  ?.shiprocket_status ?? null,
+            }
+          : currentOrder
+      )
+    );
+  } catch (error) {
+    console.error(
+      "Ship Now error:",
+      error
+    );
+
+    alert(
+      "Something went wrong while shipping the order."
+    );
+  }
+};
   const updateOrderStatus = async (
   orderNumber: string,
   newStatus: string
@@ -1103,6 +1287,56 @@ const updateStock = async (
                     </div>
 
                   </div>
+                  <div className="admin-shipping-info">
+  <h3>Shipping Details</h3>
+
+  <p>
+    <strong>Shiprocket Order ID:</strong>{" "}
+    {order.shiprocket_order_id || "Not assigned"}
+  </p>
+
+  <p>
+    <strong>Shipment ID:</strong>{" "}
+    {order.shiprocket_shipment_id || "Not assigned"}
+  </p>
+
+  <p>
+    <strong>Tracking ID / AWB:</strong>{" "}
+    {order.shiprocket_awb_code || "Not assigned"}
+  </p>
+
+  <p>
+    <strong>Courier:</strong>{" "}
+    {order.shiprocket_courier_name || "Not assigned"}
+  </p>
+
+  <p>
+    <strong>Shipping Status:</strong>{" "}
+    {order.shiprocket_status || "NEW"}
+  </p>
+  
+  {!order.shiprocket_order_id && (
+  <button
+    onClick={() => handleShipNow(order)}
+    className="admin-ship-now-btn"
+  >
+    🚚 SHIP NOW
+  </button>
+)}
+
+  {order.shiprocket_awb_code && (
+    <a
+      href={`https://www.shiprocket.in/shipment-tracking/?awb=${encodeURIComponent(
+        order.shiprocket_awb_code
+      )}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="admin-track-order-btn"
+    >
+      TRACK SHIPMENT →
+    </a>
+  )}
+</div>
 
                   <div className="order-card-footer">
 

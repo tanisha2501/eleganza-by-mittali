@@ -5,6 +5,7 @@ import Script from "next/script";
 import { products as defaultProducts } from "../lib/products";
 import { supabase } from "../lib/supabase";
 
+
 declare global {
   interface Window {
     Razorpay: any;
@@ -127,7 +128,106 @@ const total = cart.reduce((sum, item) => {
 
   return sum + price * item.quantity;
 }, 0);
+const createShiprocketOrder = async (orderNumber: string) => {
+  const orderItems = cart.map((item) => {
+    const product = allProducts.find((p) => p.name === item.name);
 
+    const price = product
+      ? typeof product.price === "number"
+        ? product.price
+        : Number(
+            product.price
+              .replace("₹", "")
+              .replace(/,/g, "")
+          )
+      : 0;
+
+    return {
+      name: item.name,
+      sku: item.name
+        .toLowerCase()
+        .replace(/\s+/g, "-"),
+      units: item.quantity,
+      selling_price: price,
+      discount: 0,
+      tax: 0,
+      hsn: "",
+    };
+  });
+
+ const {
+  data: { session },
+} = await supabase.auth.getSession();
+
+if (!session?.access_token) {
+  alert("Please login again.");
+  return;
+}
+
+const response = await fetch("/api/shiprocket/create-order", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session.access_token}`,
+  },
+    body: JSON.stringify({
+      order_id: orderNumber,
+      order_date: new Date().toISOString(),
+
+      billing_customer_name: customerName,
+      billing_last_name: "",
+      billing_address: `${address}, ${area}`,
+      billing_city: city,
+      billing_pincode: pincode,
+      billing_state: state,
+      billing_country: "India",
+      billing_email: email,
+      billing_phone: mobile,
+
+      shipping_is_billing: true,
+
+      shipping_customer_name: customerName,
+      shipping_last_name: "",
+      shipping_address: `${address}, ${area}`,
+      shipping_city: city,
+      shipping_pincode: pincode,
+      shipping_state: state,
+      shipping_country: "India",
+      shipping_email: email,
+      shipping_phone: mobile,
+
+      order_items: orderItems,
+
+      payment_method:
+        paymentMethod === "online"
+          ? "Prepaid"
+          : "COD",
+
+      sub_total: total,
+
+      length: 20,
+      breadth: 15,
+      height: 10,
+      weight: 0.5,
+    }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok || !result.success) {
+    console.error(
+      "Shiprocket order failed:",
+      result
+    );
+
+    throw new Error(
+      result.error ||
+        "Shiprocket order creation failed"
+    );
+  }
+
+  return result;
+};
 const handlePlaceOrder = async () => {
   if (
     !customerName ||
@@ -150,13 +250,23 @@ const handlePlaceOrder = async () => {
 
   try {
     if (paymentMethod === "online") {
-      const razorpayResponse = await fetch(
-        "/api/razorpay/create-order",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      alert("Please login again.");
+      return;
+    }
+
+    const razorpayResponse = await fetch(
+      "/api/razorpay/create-order",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
           body: JSON.stringify({
             items: cart,
           }),
@@ -197,13 +307,23 @@ const handlePlaceOrder = async () => {
           razorpay_signature: string;
         }) {
           try {
-            const orderResponse = await fetch(
-              "/api/orders",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          alert("Please login again.");
+          return;
+        }
+
+        const orderResponse = await fetch(
+          "/api/orders",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
                 body: JSON.stringify({
                   customer_name: customerName,
                   customer_email: email,
@@ -240,10 +360,12 @@ const handlePlaceOrder = async () => {
               orderResult.order?.order_number ||
               orderResult.order_number;
 
+
             localStorage.setItem(
               "eleganza-last-order",
               orderNumber
             );
+
 
             localStorage.removeItem(
               "eleganza-cart"
@@ -292,10 +414,20 @@ const handlePlaceOrder = async () => {
       return;
     }
 
+      const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      alert("Please login again.");
+      return;
+    }
+
     const response = await fetch("/api/orders", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({
         customer_name: customerName,
@@ -324,6 +456,7 @@ const handlePlaceOrder = async () => {
     const orderNumber =
       result.order?.order_number ||
       result.order_number;
+
 
     localStorage.setItem(
       "eleganza-last-order",

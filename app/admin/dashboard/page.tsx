@@ -2,6 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+type ExchangeRequest = {
+  id: number;
+  order_number: string;
+  customer_name: string;
+  customer_email: string;
+  reason: string;
+  exchange_items: {
+    product_name: string;
+    old_size: string;
+    new_size: string;
+    quantity: number;
+  }[];
+  status: string;
+  created_at: string;
+};
 
 export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -16,6 +31,8 @@ export default function AdminDashboardPage() {
   });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [lowStockItems, setLowStockItems] = useState<any[]>([]);
+  const [exchangeRequests, setExchangeRequests] =
+  useState<ExchangeRequest[]>([]);
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -43,6 +60,7 @@ const [
   productsResult,
   reviewsResult,
   recentOrdersResult,
+  exchangeRequestsResult,
 ] = await Promise.all([
   supabase
     .from("orders")
@@ -65,6 +83,13 @@ const [
       ascending: false,
     })
     .limit(5),
+    supabase
+  .from("exchange_requests")
+  .select("*")
+  .eq("status", "pending")
+  .order("created_at", {
+    ascending: false,
+  }),
 ]);
 
       const orders = ordersResult.data || [];
@@ -72,6 +97,9 @@ const [
       const reviews = reviewsResult.data || [];
       setRecentOrders(
   recentOrdersResult.data || []
+);
+setExchangeRequests(
+  exchangeRequestsResult.data || []
 );
 
       const pendingOrders = orders.filter(
@@ -171,6 +199,176 @@ setLowStockItems(lowStockList);
 
     loadDashboard();
   }, []);
+  const handleExchangeAction = async (
+  request: ExchangeRequest,
+  action: "approved" | "rejected"
+) => {
+  try {
+    if (action === "rejected") {
+      const { error } = await supabase
+        .from("exchange_requests")
+        .update({
+          status: "rejected",
+        })
+        .eq("id", request.id);
+
+      if (error) {
+        console.error(
+          "Reject exchange error:",
+          error
+        );
+
+        alert("Could not reject exchange request.");
+        return;
+      }
+
+      alert("Exchange request rejected.");
+
+      setExchangeRequests((prev) =>
+        prev.filter((item) => item.id !== request.id)
+      );
+
+      return;
+    }
+
+    // APPROVE
+
+    for (const item of request.exchange_items) {
+      const { data: product, error: productError } =
+        await supabase
+          .from("products")
+          .select("id, name, sizes")
+          .eq("name", item.product_name)
+          .single();
+
+      if (productError || !product) {
+        console.error(
+          "Product loading error:",
+          productError
+        );
+
+        alert(
+          `Product "${item.product_name}" was not found.`
+        );
+
+        return;
+      }
+
+      const sizes = product.sizes;
+
+      if (!sizes || typeof sizes !== "object") {
+        alert(
+          `Inventory data not found for ${item.product_name}.`
+        );
+
+        return;
+      }
+
+      const updatedSizes = JSON.parse(
+        JSON.stringify(sizes)
+      );
+
+      const inventory =
+        updatedSizes.Default;
+
+      if (!inventory) {
+        alert(
+          `Default inventory not found for ${item.product_name}.`
+        );
+
+        return;
+      }
+
+      const oldStock = Number(
+        inventory[item.old_size] ?? 0
+      );
+
+      const newStock = Number(
+        inventory[item.new_size] ?? 0
+      );
+
+      if (
+        item.old_size !== item.new_size &&
+        newStock < item.quantity
+      ) {
+        alert(
+          `Not enough ${item.new_size} stock for ${item.product_name}.`
+        );
+
+        return;
+      }
+
+      // Return old size to inventory
+      inventory[item.old_size] =
+        oldStock + item.quantity;
+
+      // Take new size from inventory
+      if (item.old_size !== item.new_size) {
+        inventory[item.new_size] =
+          newStock - item.quantity;
+      }
+
+      const { error: updateProductError } =
+        await supabase
+          .from("products")
+          .update({
+            sizes: updatedSizes,
+          })
+          .eq("id", product.id);
+
+      if (updateProductError) {
+        console.error(
+          "Inventory update error:",
+          updateProductError
+        );
+
+        alert(
+          `Could not update inventory for ${item.product_name}.`
+        );
+
+        return;
+      }
+    }
+
+    const { error: exchangeError } =
+      await supabase
+        .from("exchange_requests")
+        .update({
+          status: "approved",
+        })
+        .eq("id", request.id);
+
+    if (exchangeError) {
+      console.error(
+        "Exchange approval error:",
+        exchangeError
+      );
+
+      alert(
+        "Inventory updated but exchange status could not be updated."
+      );
+
+      return;
+    }
+
+    alert(
+      "Exchange approved and inventory updated successfully! 🎉"
+    );
+
+    setExchangeRequests((prev) =>
+      prev.filter((item) => item.id !== request.id)
+    );
+  } catch (error) {
+    console.error(
+      "Exchange processing error:",
+      error
+    );
+
+    alert(
+      "Something went wrong while processing the exchange."
+    );
+  }
+};
 
   if (loading) {
     return (
@@ -215,25 +413,29 @@ setLowStockItems(lowStockList);
 
         </div>
 
-        <nav className="admin-nav">
+<nav className="admin-nav">
 
-          <a href="/admin/dashboard">
-            Dashboard
-          </a>
+  <a href="/admin/dashboard">
+    Dashboard
+  </a>
 
-          <a href="/admin/orders">
-            Orders
-          </a>
+  <a href="/admin/orders">
+    Orders
+  </a>
 
-          <a href="/admin/products/add">
-            Add Product
-          </a>
+  <a href="/admin/products/add">
+    Add Product
+  </a>
 
-          <a href="/admin/reviews">
-            Reviews
-          </a>
+  <a href="/admin/reviews">
+    Reviews
+  </a>
 
-        </nav>
+  <a href="/admin/exchange-requests">
+    Exchange Requests
+  </a>
+
+</nav>
 
         <div className="dashboard-grid">
 
@@ -301,6 +503,142 @@ setLowStockItems(lowStockList);
           </div>
 
         </div>
+       <div className="exchange-dashboard-section">
+
+  <div className="exchange-dashboard-header">
+    <div>
+      <p className="admin-small-heading">
+        CUSTOMER SERVICE
+      </p>
+
+      <h2>Exchange Requests</h2>
+    </div>
+
+    <span className="exchange-request-count">
+      {exchangeRequests.length} Pending
+    </span>
+  </div>
+
+  {exchangeRequests.length === 0 ? (
+    <div className="exchange-dashboard-empty">
+      <span>✓</span>
+      <p>No pending exchange requests.</p>
+    </div>
+  ) : (
+    <div className="dashboard-exchange-list">
+
+      {exchangeRequests.map((request) => (
+        <div
+          className="dashboard-exchange-card"
+          key={request.id}
+        >
+
+          <div className="dashboard-exchange-top">
+
+            <div>
+              <span className="exchange-order-label">
+                ORDER NUMBER
+              </span>
+
+              <strong>
+                {request.order_number}
+              </strong>
+            </div>
+
+            <span className="exchange-pending-badge">
+              PENDING
+            </span>
+
+          </div>
+
+          <div className="dashboard-exchange-customer">
+
+            <strong>
+              {request.customer_name}
+            </strong>
+
+            <span>
+              {request.customer_email}
+            </span>
+
+          </div>
+
+          <div className="dashboard-exchange-product">
+
+            {request.exchange_items?.map(
+              (item, index) => (
+                <div
+                  key={index}
+                  className="dashboard-exchange-item"
+                >
+
+                  <strong>
+                    {item.product_name}
+                  </strong>
+
+                  <span>
+                    Size {item.old_size}
+                    {" → "}
+                    Size {item.new_size}
+                  </span>
+
+                  <span>
+                    Quantity: {item.quantity}
+                  </span>
+
+                </div>
+              )
+            )}
+
+          </div>
+
+          <div className="dashboard-exchange-reason">
+
+            <span>REASON</span>
+
+            <p>
+              {request.reason}
+            </p>
+
+          </div>
+
+          <div className="dashboard-exchange-actions">
+
+            <button
+              type="button"
+              className="dashboard-approve-btn"
+              onClick={() =>
+                handleExchangeAction(
+                  request,
+                  "approved"
+                )
+              }
+            >
+              ✓ APPROVE
+            </button>
+
+            <button
+              type="button"
+              className="dashboard-reject-btn"
+              onClick={() =>
+                handleExchangeAction(
+                  request,
+                  "rejected"
+                )
+              }
+            >
+              ✕ REJECT
+            </button>
+
+          </div>
+
+        </div>
+      ))}
+
+    </div>
+  )}
+
+</div> 
         <div className="recent-orders-section">
 <div className="low-stock-section">
 

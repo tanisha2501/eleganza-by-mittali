@@ -7,7 +7,26 @@ const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SECRET_KEY!
 );
+async function getAuthenticatedUser(request: Request) {
+  const authHeader = request.headers.get("authorization");
 
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+
+  const accessToken = authHeader.substring(7);
+
+  const {
+    data: { user },
+    error,
+  } = await supabaseAdmin.auth.getUser(accessToken);
+
+  if (error || !user) {
+    return null;
+  }
+
+  return user;
+}
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID!,
   key_secret: process.env.RAZORPAY_KEY_SECRET!,
@@ -57,11 +76,18 @@ function verifyRazorpaySignature(
 
 export async function POST(request: Request) {
   try {
+        const user = await getAuthenticatedUser(request);
+
+    if (!user || !user.email) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
     const body = await request.json();
 
     const {
       customer_name,
-      customer_email,
       customer_mobile,
       address,
       area,
@@ -77,7 +103,6 @@ export async function POST(request: Request) {
 
     if (
       !customer_name ||
-      !customer_email ||
       !customer_mobile ||
       !address ||
       !area ||
@@ -265,8 +290,8 @@ export async function POST(request: Request) {
           )}`,
           p_customer_name:
             customer_name,
-          p_customer_email:
-            customer_email,
+            p_customer_email:
+          user.email,
           p_customer_mobile:
             customer_mobile,
           p_address: address,

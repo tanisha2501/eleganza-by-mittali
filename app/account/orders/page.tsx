@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 type Order = {
+  id: number;
   orderNumber: string;
   customer: {
     name: string;
@@ -23,11 +24,35 @@ type Order = {
   total: number;
   date: string;
   status: string;
+
+shiprocket_order_id?: number | null;
+shiprocket_shipment_id?: number | null;
+shiprocket_awb_code?: string | null;
+shiprocket_courier_name?: string | null;
+shiprocket_status?: string | null;
+shiprocket_tracking_url: string | null;
+};
+
+type ExchangeStatus = {
+  status: string;
+
+  returnAwbCode?: string | null;
+  returnCourierName?: string | null;
+  returnTrackingUrl?: string | null;
+
+  exchangeOrderId?: string | null;
+  exchangeShipmentId?: string | null;
+  exchangeAwbCode?: string | null;
+  exchangeCourierName?: string | null;
+  exchangeStatus?: string | null;
+  exchangeTrackingUrl?: string | null;
 };
 
 export default function MyOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exchangeStatuses, setExchangeStatuses] =
+  useState<Record<number, ExchangeStatus>>({});
 
   useEffect(() => {
   const loadOrders = async () => {
@@ -59,10 +84,80 @@ if (error) {
   setLoading(false);
   return;
 }
+const { data: exchangeData, error: exchangeError } =
+  await supabase
+    .from("exchange_requests")
+    .select(`
+      order_id,
+      status,
+      shiprocket_return_awb_code,
+      shiprocket_return_courier_name,
+      shiprocket_return_tracking_url,
+      shiprocket_exchange_order_id,
+      shiprocket_exchange_shipment_id,
+      shiprocket_exchange_awb_code,
+      shiprocket_exchange_courier_name,
+      shiprocket_exchange_status,
+      shiprocket_exchange_tracking_url
+    `)
+    .eq("customer_email", user.email);
+
+if (exchangeError) {
+  console.error(
+    "Error loading exchange requests:",
+    exchangeError
+  );
+}
+
+const exchangeStatusMap: Record<
+  number,
+  ExchangeStatus
+> = {};
+
+(exchangeData || []).forEach((exchange) => {
+  exchangeStatusMap[exchange.order_id] = {
+    status: exchange.status,
+
+    returnAwbCode:
+      exchange.shiprocket_return_awb_code,
+
+    returnCourierName:
+      exchange.shiprocket_return_courier_name,
+
+    returnTrackingUrl:
+      exchange.shiprocket_return_tracking_url,
+
+    exchangeOrderId:
+      exchange.shiprocket_exchange_order_id,
+
+    exchangeShipmentId:
+      exchange.shiprocket_exchange_shipment_id,
+
+    exchangeAwbCode:
+      exchange.shiprocket_exchange_awb_code,
+
+    exchangeCourierName:
+      exchange.shiprocket_exchange_courier_name,
+
+    exchangeStatus:
+      exchange.shiprocket_exchange_status,
+
+    exchangeTrackingUrl:
+      exchange.shiprocket_exchange_tracking_url,
+  };
+});
+
+setExchangeStatuses(exchangeStatusMap);
   const formattedOrders: Order[] = (data || []).map(
     (order) => ({
+      id: order.id,
       orderNumber: order.order_number,
-      customer: {
+    shiprocketOrderId: order.shiprocket_order_id,
+    shiprocketShipmentId: order.shiprocket_shipment_id,
+    shiprocketAwbCode: order.shiprocket_awb_code,
+    shiprocketCourierName: order.shiprocket_courier_name,
+
+    customer: {
         name: order.customer_name,
         mobile: order.customer_mobile,
         email: order.customer_email,
@@ -78,6 +173,12 @@ if (error) {
         order.created_at
       ).toLocaleDateString("en-IN"),
       status: order.status,
+shiprocket_order_id: order.shiprocket_order_id,
+shiprocket_shipment_id: order.shiprocket_shipment_id,
+shiprocket_awb_code: order.shiprocket_awb_code,
+shiprocket_courier_name: order.shiprocket_courier_name,
+shiprocket_status: order.shiprocket_status,
+shiprocket_tracking_url: order.shiprocket_tracking_url,
     })
   );
 
@@ -165,10 +266,177 @@ loadOrders();
     }
   )}
 </div>
+{exchangeStatuses[order.id] && (
+  <div className="exchange-order-status">
+
+    <span>EXCHANGE REQUEST</span>
+
+    <strong>
+      {exchangeStatuses[order.id].status ===
+      "pending"
+        ? "🟡 Pending"
+
+        : exchangeStatuses[order.id].status ===
+          "approved"
+        ? "🟢 Approved"
+
+        : exchangeStatuses[order.id].status ===
+          "pickup_requested"
+        ? "📦 Pickup Requested"
+
+        : exchangeStatuses[order.id].status ===
+          "received"
+        ? "📥 Product Received"
+
+        : exchangeStatuses[order.id].status ===
+          "exchange_shipped"
+        ? "🚚 Exchange Shipped"
+
+        : exchangeStatuses[order.id].status ===
+          "completed"
+        ? "✅ Exchange Completed"
+
+        : exchangeStatuses[order.id].status ===
+          "rejected"
+        ? "🔴 Rejected"
+
+        : exchangeStatuses[order.id].status}
+    </strong>
+
+    {/* EXCHANGE SHIPMENT */}
+    {exchangeStatuses[order.id]
+      .exchangeOrderId && (
+      <div className="exchange-shipment-info">
+
+        <div className="shipment-detail">
+          <span>EXCHANGE SHIPMENT ID</span>
+
+          <strong>
+            {
+              exchangeStatuses[order.id]
+                .exchangeShipmentId
+            }
+          </strong>
+        </div>
+
+        {exchangeStatuses[order.id]
+          .exchangeAwbCode && (
+          <div className="shipment-detail">
+            <span>EXCHANGE AWB</span>
+
+            <strong>
+              {
+                exchangeStatuses[order.id]
+                  .exchangeAwbCode
+              }
+            </strong>
+          </div>
+        )}
+
+        {exchangeStatuses[order.id]
+          .exchangeCourierName && (
+          <div className="shipment-detail">
+            <span>COURIER</span>
+
+            <strong>
+              {
+                exchangeStatuses[order.id]
+                  .exchangeCourierName
+              }
+            </strong>
+          </div>
+        )}
+
+        {exchangeStatuses[order.id]
+          .exchangeTrackingUrl && (
+          <a
+            href={
+              exchangeStatuses[order.id]
+                .exchangeTrackingUrl!
+            }
+            target="_blank"
+            rel="noopener noreferrer"
+            className="track-order-btn"
+          >
+            TRACK EXCHANGE →
+          </a>
+        )}
+
+      </div>
+    )}
+  </div>
+)}
+{order.shiprocket_awb_code && (
+  <div className="customer-shipment-info">
+
+    <div className="shipment-detail">
+      <span>AWB / TRACKING ID</span>
+
+      <strong>
+        {order.shiprocket_awb_code}
+      </strong>
+    </div>
+
+    {order.shiprocket_courier_name && (
+      <div className="shipment-detail">
+        <span>COURIER</span>
+
+        <strong>
+          {order.shiprocket_courier_name}
+        </strong>
+      </div>
+    )}
+
+    {order.shiprocket_tracking_url && (
+      <a
+        href={order.shiprocket_tracking_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="track-order-btn"
+      >
+        TRACK ORDER →
+      </a>
+    )}
+
+  </div>
+)}
                 </div>
                 <p className="customer-order-date">
                   {order.date}
                 </p>
+  {order.shiprocket_awb_code ? (
+  <div className="customer-order-tracking">
+    <div>
+      <span>TRACKING ID</span>
+      <strong>{order.shiprocket_awb_code}</strong>
+    </div>
+
+    {order.shiprocket_courier_name && (
+      <div>
+        <span>COURIER</span>
+        <strong>{order.shiprocket_courier_name}</strong>
+      </div>
+    )}
+
+    {order.shiprocket_tracking_url && (
+      <a
+        href={order.shiprocket_tracking_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="track-order-btn"
+      >
+        TRACK ORDER →
+      </a>
+    )}
+  </div>
+) : (
+  <div className="customer-order-tracking pending-tracking">
+    <span>TRACKING</span>
+    <p>
+      Tracking will be available once your order is shipped.
+    </p>
+  </div>
+)}
 
                 <div className="customer-order-items">
                   {order.items.map((item, index) => (
@@ -187,13 +455,29 @@ loadOrders();
                   ))}
                 </div>
 
-                <div className="customer-order-footer">
-                  <span>TOTAL</span>
+          <div className="customer-order-footer">
+          <div>
+            <span>TOTAL</span>
 
-                  <strong>
-                    ₹{order.total.toLocaleString("en-IN")}
-                  </strong>
-                </div>
+            <strong>
+              ₹{order.total.toLocaleString("en-IN")}
+            </strong>
+          </div>
+
+          {order.status === "Delivered" &&
+          (!exchangeStatuses[order.id] ||
+            exchangeStatuses[order.id].status === "rejected") && (
+            <button
+              className="exchange-order-btn"
+              onClick={() => {
+                window.location.href =
+                  `/exchange?order=${order.id}`;
+              }}
+            >
+              REQUEST EXCHANGE
+            </button>
+          )}
+        </div>
               </div>
             ))}
           </div>

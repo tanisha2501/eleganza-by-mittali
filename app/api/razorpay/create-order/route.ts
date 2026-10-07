@@ -11,9 +11,38 @@ const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SECRET_KEY!
 );
+async function getAuthenticatedUser(request: Request) {
+  const authHeader = request.headers.get("authorization");
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+
+  const accessToken = authHeader.substring(7);
+
+  const {
+    data: { user },
+    error,
+  } = await supabaseAdmin.auth.getUser(accessToken);
+
+  if (error || !user) {
+    return null;
+  }
+
+  return user;
+}
 
 export async function POST(req: Request) {
   try {
+    const user = await getAuthenticatedUser(req);
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { items } = await req.json();
 
     if (!Array.isArray(items) || items.length === 0) {

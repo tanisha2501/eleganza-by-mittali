@@ -136,7 +136,7 @@ useEffect(() => {
 >([]);
   
   const [wishlistOpen, setWishlistOpen] = useState(false);
-  useEffect(() => {
+useEffect(() => {
   const loadWishlist = async () => {
     const savedUser = localStorage.getItem(
       "eleganza-current-user"
@@ -149,30 +149,41 @@ useEffect(() => {
 
     const user = JSON.parse(savedUser);
 
-    const { data, error } = await supabase
-      .from("wishlists")
-      .select("product_name, colour, size")
-      .eq("user_email", user.email)
-      .order("created_at", {
-        ascending: true,
-      });
+    try {
+     const {
+  data: { session },
+} = await supabase.auth.getSession();
 
-    if (error) {
-      console.error(
-        "Error loading wishlist:",
-        error
+if (!session?.access_token) {
+  setWishlist([]);
+  return;
+}
+
+const response = await fetch("/api/wishlist", {
+  headers: {
+    Authorization: `Bearer ${session.access_token}`,
+  },
+});
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("Error loading wishlist:", data);
+        setWishlist([]);
+        return;
+      }
+
+      setWishlist(
+        (data || []).map((item: any) => ({
+          name: item.product_name,
+          colour: item.colour,
+          size: item.size,
+        }))
       );
+    } catch (error) {
+      console.error("Error loading wishlist:", error);
       setWishlist([]);
-      return;
     }
-
-    setWishlist(
-      (data || []).map((item) => ({
-        name: item.product_name,
-        colour: item.colour,
-        size: item.size,
-      }))
-    );
   };
 
   loadWishlist();
@@ -339,6 +350,14 @@ const toggleWishlist = async (
   }
 
   const user = JSON.parse(savedUser);
+  const {
+  data: { session },
+} = await supabase.auth.getSession();
+
+if (!session?.access_token) {
+  alert("Please login again to use wishlist.");
+  return;
+}
 
   const product = allProducts.find(
     (item) => item.name === productName
@@ -358,64 +377,95 @@ const toggleWishlist = async (
       item.size === size
   );
 
+  // REMOVE FROM WISHLIST
   if (exists) {
-    const { error } = await supabase
-      .from("wishlists")
-      .delete()
-      .eq("user_email", user.email)
-      .eq("product_name", productName)
-      .eq("colour", colour)
-      .eq("size", size);
+    try {
+      const response = await fetch("/api/wishlist", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      body: JSON.stringify({
+        product_name: productName,
+        colour,
+        size,
+      }),
+      });
 
-    if (error) {
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error(
+          "Error removing wishlist item:",
+          data
+        );
+        alert("Could not remove from wishlist.");
+        return;
+      }
+
+      setWishlist((currentWishlist) =>
+        currentWishlist.filter(
+          (item) =>
+            !(
+              item.name === productName &&
+              item.colour === colour &&
+              item.size === size
+            )
+        )
+      );
+    } catch (error) {
       console.error(
         "Error removing wishlist item:",
         error
       );
       alert("Could not remove from wishlist.");
-      return;
     }
-
-    setWishlist((currentWishlist) =>
-      currentWishlist.filter(
-        (item) =>
-          !(
-            item.name === productName &&
-            item.colour === colour &&
-            item.size === size
-          )
-      )
-    );
 
     return;
   }
 
-  const { error } = await supabase
-    .from("wishlists")
-    .insert({
-      user_email: user.email,
-      product_name: productName,
-      colour,
-      size,
+  // ADD TO WISHLIST
+  try {
+    const response = await fetch("/api/wishlist", {
+      method: "POST",
+      headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
+    },
+        body: JSON.stringify({
+          product_name: productName,
+          colour,
+          size,
+        }),
     });
 
-  if (error) {
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error(
+        "Error adding wishlist item:",
+        data
+      );
+      alert("Could not add to wishlist.");
+      return;
+    }
+
+    setWishlist((currentWishlist) => [
+      ...currentWishlist,
+      {
+        name: productName,
+        colour,
+        size,
+      },
+    ]);
+  } catch (error) {
     console.error(
       "Error adding wishlist item:",
       error
     );
     alert("Could not add to wishlist.");
-    return;
   }
-
-  setWishlist((currentWishlist) => [
-    ...currentWishlist,
-    {
-      name: productName,
-      colour,
-      size,
-    },
-  ]);
 };
 
 
@@ -803,7 +853,7 @@ return {
         </div>
       ) : (
         <div className="wishlist-items">
-          {wishlist.map((item) => {
+          {wishlist.map((item,index) => {
             const product = allProducts.find(
               (p) => p.name === item.name
             );
@@ -811,9 +861,9 @@ return {
             if (!product) return null;
 
             return (
-              <div
+             <div
   className="wishlist-item"
-  key={`${item.name}-${item.colour}-${item.size}`}
+  key={`${item.name}-${item.colour}-${item.size}-${index}`}
  onClick={() =>
   (window.location.href = `/product/${item.name
     .toLowerCase()
