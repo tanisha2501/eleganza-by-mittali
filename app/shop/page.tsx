@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { products } from "../lib/products";
 import { supabase } from "../lib/supabase";
 
 type Product = {
   name: string;
   category: string;
-  price: string;
+  price: string | number;
   image?: string;
   images?: string[];
   description: string;
@@ -18,12 +17,9 @@ type Product = {
 
 const categories = [
   "All",
-  "Farshi Suits",
+  "Farshi Sets",
   "Cord Sets",
   "Suits",
-  "Anarkali",
-  "Pakistani Suits",
-  "Sharara Sets",
 ];
 
 export default function ShopPage() {
@@ -51,17 +47,12 @@ useEffect(() => {
         error
       );
 
-      setAllProducts(products);
+      setAllProducts([]);
       setProductsLoading(false);
       return;
     }
 
-    if (data && data.length > 0) {
-      setAllProducts(data);
-    } else {
-      setAllProducts(products);
-    }
-
+    setAllProducts(data || []);
     setProductsLoading(false);
   };
 

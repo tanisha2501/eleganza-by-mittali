@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { products } from "../../lib/products";
 import { supabase } from "../../lib/supabase";
 import ProductReviews from "../ProductReviews";
 
@@ -78,7 +77,7 @@ export default function ProductPage() {
   const slug = params.slug as string;
 
   const [allProducts, setAllProducts] =
-    useState<Product[]>(products);
+  useState<Product[]>([]);
 
   const [productsLoaded, setProductsLoaded] =
     useState(false);
@@ -92,17 +91,12 @@ export default function ProductPage() {
 
     if (error) {
       console.error("Error loading products:", error);
-      setAllProducts(products);
+      setAllProducts([]);
       setProductsLoaded(true);
       return;
     }
 
-    if (data && data.length > 0) {
-      setAllProducts(data);
-    } else {
-      setAllProducts(products);
-    }
-
+    setAllProducts(data || []);
     setProductsLoaded(true);
   };
 

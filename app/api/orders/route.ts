@@ -120,17 +120,26 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      payment_method !== "online" &&
-      payment_method !== "cod"
-    ) {
-      return NextResponse.json(
-        {
-          error: "Invalid payment method",
-        },
-        { status: 400 }
-      );
-    }
+if (
+  payment_method !== "online" &&
+  payment_method !== "cod"
+) {
+  return NextResponse.json(
+    {
+      error: "Invalid payment method",
+    },
+    { status: 400 }
+  );
+}
+
+if (payment_method === "cod") {
+  return NextResponse.json(
+    {
+      error: "Cash on Delivery is currently unavailable. Please use online payment.",
+    },
+    { status: 400 }
+  );
+}
 
     let verifiedTotal = 0;
 

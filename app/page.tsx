@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { products } from "./lib/products";
 import { supabase } from "./lib/supabase";
 const categories = [
   {
-    name: "Farshi Suits",
+    name: "Farshi Sets",
     description: "Royal & graceful silhouettes",
     image: "/categories/farshi.jpg",
   },
@@ -19,23 +18,7 @@ const categories = [
     description: "Timeless ethnic collections",
     image: "/categories/suits.jpg",
   },
-  {
-    name: "Anarkali",
-    description: "Elegant festive styles",
-    image: "/categories/anarkali.jpg",
-  },
-  {
-    name: "Pakistani Suits",
-    description: "Classic designer aesthetics",
-    image: "/categories/pakistani.jpg",
-  },
-  {
-    name: "Sharara Sets",
-    description: "Perfect for celebrations",
-    image: "/categories/sharara.jpg",
-  },
 ];
-
 type Product = {
   name: string;
   category: string;
@@ -70,17 +53,13 @@ useEffect(() => {
       .select("*")
       .order("id", { ascending: true });
 
-    if (error) {
-      console.error("Error loading products:", error);
-      setAllProducts(products);
-      return;
-    }
+if (error) {
+  console.error("Error loading products:", error);
+  setAllProducts([]);
+  return;
+}
 
-    if (data && data.length > 0) {
-      setAllProducts(data);
-    } else {
-      setAllProducts(products);
-    }
+setAllProducts(data || []);
   };
 
   loadProducts();
@@ -619,7 +598,7 @@ if (!session?.access_token) {
         .includes(searchTerm.toLowerCase().trim())
     ).length === 0 && (
       <p className="no-search-results">
-        No allProducts found.
+        No Products found.
       </p>
     )}
   </div>
@@ -1177,7 +1156,7 @@ wishlist.some(
 
         <div className="center-button">
           <a href="/shop" className="outline-btn">
-            VIEW ALL allProducts
+            VIEW ALL Products
           </a>
         </div>
       </section>

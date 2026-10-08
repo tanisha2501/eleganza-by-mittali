@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Script from "next/script";
-import { products as defaultProducts } from "../lib/products";
 import { supabase } from "../lib/supabase";
 
 
@@ -34,7 +33,7 @@ type Product = {
 export default function CheckoutPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
 const [allProducts, setAllProducts] =
-  useState<Product[]>(defaultProducts);
+  useState<Product[]>([]);
   const [customerName, setCustomerName] = useState("");
 const [mobile, setMobile] = useState("");
 const [email, setEmail] = useState("");
@@ -43,8 +42,7 @@ const [area, setArea] = useState("");
 const [city, setCity] = useState("");
 const [pincode, setPincode] = useState("");
 const [state, setState] = useState("");
-const [paymentMethod, setPaymentMethod] =
-  useState<"online" | "cod">("online");
+const [paymentMethod] = useState<"online">("online");
 
   useEffect(() => {
   const checkAuth = async () => {
@@ -92,23 +90,16 @@ const loadCheckoutData = async () => {
       .order("id", { ascending: true });
 
     if (error) {
-      console.error(
-        "Error loading products:",
-        error
-      );
-      setAllProducts(defaultProducts);
+      console.error("Error loading products:", error);
+      setAllProducts([]);
       return;
     }
 
-    if (data && data.length > 0) {
-      setAllProducts(data);
-    } else {
-      setAllProducts(defaultProducts);
-    }
-  };
+    setAllProducts(data || []);
+      };
 
-  loadCheckoutData();
-}, []);
+      loadCheckoutData();
+    }, []);
 
 const total = cart.reduce((sum, item) => {
  const product = allProducts.find(
@@ -565,29 +556,16 @@ const handlePlaceOrder = async () => {
           <section className="checkout-section">
             <h2>Payment</h2>
 
-            <div className="payment-option">
-           <input
-  type="radio"
-  name="payment"
-  value="online"
-  checked={paymentMethod === "online"}
-  onChange={() => setPaymentMethod("online")}
-/>
-
-              <span>Online Payment</span>
-            </div>
-
-            <div className="payment-option">
-            <input
-  type="radio"
-  name="payment"
-  value="cod"
-  checked={paymentMethod === "cod"}
-  onChange={() => setPaymentMethod("cod")}
-/>
-
-              <span>Cash on Delivery</span>
-            </div>
+           <div className="payment-option">
+  <input
+    type="radio"
+    name="payment"
+    value="online"
+    checked
+    readOnly
+  />
+  <span>Online Payment</span>
+</div>
           </section>
 
         </div>
