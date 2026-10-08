@@ -42,7 +42,8 @@ export async function generateMetadata({
     product.image ||
     "/logo.png";
 
-  const canonicalUrl = `https://eleganza-by-mittali.vercel.app/product/${productSlug}`;
+ const canonicalUrl =
+  `https://eleganzabymittali.com/product/${productSlug}`;
 
   return {
     title,

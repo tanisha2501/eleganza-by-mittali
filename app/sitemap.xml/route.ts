@@ -1,6 +1,6 @@
 import { supabase } from "../lib/supabase";
 
-const BASE_URL = "https://eleganza-by-mittali.vercel.app";
+const BASE_URL = "https://eleganzabymittali.com";
 
 type Product = {
   name: string;

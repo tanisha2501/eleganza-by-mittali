@@ -13,6 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://eleganzabymittali.com"),
+
   title: "Eleganza by Mittali | Elegant Indian Fashion",
   description:
     "Discover elegant Indian fashion by Eleganza by Mittali — curated Farshi Suits, Cord Sets, Suits and timeless ethnic wear.",

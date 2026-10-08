@@ -25,6 +25,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: "https://eleganza-by-mittali.vercel.app/sitemap.xml",
+    sitemap: "https://eleganzabymittali.com/sitemap.xml",
   };
 }
