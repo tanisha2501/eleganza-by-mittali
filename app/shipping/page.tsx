@@ -146,7 +146,7 @@ export default function ShippingPage() {
 
        <div>
         <h4>POLICIES</h4>
-        <a href="/exchange-return">Exchange & Return</a>
+        <a href="/return-exchange-policy">Exchange & Return</a>
         <a href="/shipping">Shipping & Delivery</a>
         <a href="/privacy-policy">Privacy Policy</a>
         <a href="/terms-conditions">Terms & Conditions</a>
