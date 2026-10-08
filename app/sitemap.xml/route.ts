@@ -43,7 +43,7 @@ export async function GET() {
     "/terms-conditions",
     "/shipping",
     "/cancellation-refund",
-    "/exchange-return",
+    "/return-exchange-policy",
   ];
 
   const staticEntries = staticUrls

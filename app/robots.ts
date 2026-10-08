@@ -11,7 +11,7 @@ export default function robots(): MetadataRoute.Robots {
           "/product/",
           "/contact",
           "/shipping",
-          "/exchange-return",
+          "/return-exchange-policy",
           "/cancellation-refund",
           "/privacy-policy",
           "/terms-conditions",
