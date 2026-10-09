@@ -5,7 +5,7 @@ import { supabase } from "../../../lib/supabase";
 
 export default function AddProductPage() {
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("Farshi Suit");
+const [category, setCategory] = useState("Farshi Sets");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [images, setImages] = useState<string[]>([]);
@@ -288,7 +288,7 @@ const uploadImageToStorage = async (file: File) => {
 
             <input
               type="text"
-              placeholder="e.g. Rose Gold Anarkali"
+              placeholder="e.g. Elegant Farshi Set"
               value={name}
               onChange={(e) =>
                 setName(e.target.value)
@@ -302,35 +302,21 @@ const uploadImageToStorage = async (file: File) => {
               <label>CATEGORY *</label>
 
               <select
-                value={category}
-                onChange={(e) =>
-                  setCategory(e.target.value)
-                }
-              >
-                <option value="Farshi Suit">
-                  Farshi Suit
-                </option>
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            <option value="Farshi Sets">
+              Farshi Sets
+            </option>
 
-                <option value="Cord Set">
-                  Cord Set
-                </option>
+            <option value="Cord Sets">
+              Cord Sets
+            </option>
 
-                <option value="Suit">
-                  Suit
-                </option>
-
-                <option value="Anarkali">
-                  Anarkali
-                </option>
-
-                <option value="Pakistani Suit">
-                  Pakistani Suit
-                </option>
-
-                <option value="Sharara Set">
-                  Sharara Set
-                </option>
-              </select>
+            <option value="Suits">
+              Suits
+            </option>
+          </select>
             </div>
 
             <div className="form-group">

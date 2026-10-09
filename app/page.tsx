@@ -536,7 +536,7 @@ if (!session?.access_token) {
     <div className="search-inner">
       <input
         type="text"
-        placeholder="Search for suits, cord sets, anarkalis..."
+        placeholder="Search for Farshi Sets, Cord Sets, Suits..."
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         autoFocus
@@ -1291,13 +1291,14 @@ wishlist.some(
             </p>
           </div>
 
+        
           <div>
             <h4>SHOP</h4>
-            <a href="#categories">Farshi Suits</a>
+            <a href="#categories">Farshi Sets</a>
             <a href="#categories">Cord Sets</a>
             <a href="#categories">Suits</a>
-            <a href="#categories">Anarkali</a>
           </div>
+
 
           <div>
             <h4>QUICK LINKS</h4>

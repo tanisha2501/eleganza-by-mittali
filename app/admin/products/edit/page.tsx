@@ -9,7 +9,7 @@ export default function EditProductPage() {
     useState("");
 
   const [category, setCategory] =
-    useState("Farshi Suit");
+  useState("Farshi Sets");
 
   const [price, setPrice] =
     useState("");
@@ -399,41 +399,24 @@ const removeSize = (sizeToRemove: string) => {
                 CATEGORY *
               </label>
 
-              <select
-                value={
-                  category
-                }
-                onChange={(e) =>
-                  setCategory(
-                    e.target.value
-                  )
-                }
-              >
-                <option>
-                  Farshi Suit
-                </option>
+            <select
+              value={category}
+              onChange={(e) =>
+                setCategory(e.target.value)
+              }
+            >
+              <option value="Farshi Sets">
+                Farshi Sets
+              </option>
 
-                <option>
-                  Cord Set
-                </option>
+              <option value="Cord Sets">
+                Cord Sets
+              </option>
 
-                <option>
-                  Suit
-                </option>
-
-                <option>
-                  Anarkali
-                </option>
-
-                <option>
-                  Pakistani Suit
-                </option>
-
-                <option>
-                  Sharara Set
-                </option>
-
-              </select>
+              <option value="Suits">
+                Suits
+              </option>
+            </select>
 
             </div>
 

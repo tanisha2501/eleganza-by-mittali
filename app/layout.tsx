@@ -17,10 +17,10 @@ export const metadata: Metadata = {
 
   title: "Eleganza by Mittali | Elegant Indian Fashion",
   description:
-    "Discover elegant Indian fashion by Eleganza by Mittali — curated Farshi Suits, Cord Sets, Suits and timeless ethnic wear.",
+    "Discover elegant Indian fashion by Eleganza by Mittali — curated Farshi Sets, Cord Sets, Suits and timeless ethnic wear.",
   keywords: [
     "Eleganza by Mittali",
-    "Farshi Suits",
+    "Farshi Sets",
     "Cord Sets",
     "Suits",
     "Indian Fashion",
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Eleganza by Mittali | Elegant Indian Fashion",
     description:
-      "Discover elegant Indian fashion by Eleganza by Mittali — curated Farshi Suits, Cord Sets, Suits and timeless ethnic wear.",
+      "Discover elegant Indian fashion by Eleganza by Mittali — curated Farshi Sets, Cord Sets, Suits and timeless ethnic wear.",
     type: "website",
     siteName: "Eleganza by Mittali",
   },
