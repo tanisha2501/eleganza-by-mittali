@@ -286,6 +286,55 @@ if (invalidProduct) {
     { status: 409 }
   );
 }
+if (invalidProduct) {
+  if (
+    payment_method === "online" &&
+    payment &&
+    razorpay_payment_id &&
+    razorpay_order_id
+  ) {
+    const { error: recoveryError } = await supabaseAdmin
+      .from("payment_recovery")
+      .upsert(
+        {
+          razorpay_payment_id,
+          razorpay_order_id,
+          customer_id: user.id,
+          customer_email: user.email,
+          customer_name,
+          customer_mobile,
+          address,
+          area,
+          city,
+          pincode,
+          state,
+          items,
+          expected_amount_paise: Number(payment.amount),
+          status: "needs_review",
+          last_error: invalidProduct.slice(0, 1000),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "razorpay_payment_id" }
+      );
+
+    if (recoveryError) {
+      console.error(
+        "Failed to save invalid-product recovery:",
+        recoveryError
+      );
+    }
+  }
+
+  return NextResponse.json(
+    {
+      error:
+        "A product could not be verified. If your payment was captured, contact support with your Razorpay payment ID.",
+      recoveryRequired: payment?.status === "captured",
+      paymentId: razorpay_payment_id || null,
+    },
+    { status: 409 }
+  );
+}
     if (verifiedTotal <= 0) {
       return NextResponse.json(
         {
@@ -488,12 +537,41 @@ if (previousRecovery?.status === "needs_review") {
     };
 
     // Save verified payment details for recovery.
-        // Save verified payment details for recovery.
     if (
       payment_method === "online" &&
       razorpay_payment_id &&
       razorpay_order_id
     ) {
+      const {
+        data: previousRecovery,
+        error: previousRecoveryError,
+      } = await supabaseAdmin
+        .from("payment_recovery")
+        .select("status")
+        .eq("razorpay_payment_id", razorpay_payment_id)
+        .maybeSingle();
+
+      if (previousRecoveryError) {
+        return NextResponse.json(
+          {
+            error: "Could not verify payment recovery status.",
+            recoveryRequired: true,
+            paymentId: razorpay_payment_id,
+          },
+          { status: 500 }
+        );
+      }
+
+      if (previousRecovery?.status === "needs_review") {
+        return NextResponse.json(
+          {
+            error: "This payment requires manual review.",
+            recoveryRequired: true,
+            paymentId: razorpay_payment_id,
+          },
+          { status: 409 }
+        );
+      }
       const recoveryPayload = {
         razorpay_payment_id,
         razorpay_order_id,
@@ -577,154 +655,99 @@ if (recoveryResult.error) {
     const { data, error } = rpcResult;
 
     if (error) {
+  console.error("Order creation failed after retry:", error);
+
+  if (
+    payment_method === "online" &&
+    razorpay_payment_id
+  ) {
+    const {
+      data: recoveryRecord,
+      error: recoveryReadError,
+    } = await supabaseAdmin
+      .from("payment_recovery")
+      .select("attempts")
+      .eq("razorpay_payment_id", razorpay_payment_id)
+      .maybeSingle();
+
+    if (recoveryReadError) {
       console.error(
-        "Order creation failed after retry:",
-        error
+        "Could not read payment recovery attempts:",
+        recoveryReadError
       );
+    }
 
-      if (
-        payment_method === "online" &&
-        razorpay_payment_id
-      ) {
-        const { data: recoveryRecord, error: recoveryReadError } =
-          await supabaseAdmin
-            .from("payment_recovery")
-            .select("attempts")
-            .eq(
-              "razorpay_payment_id",
-              razorpay_payment_id
-            )
-            .maybeSingle();
+    const nextAttempts =
+      Number(recoveryRecord?.attempts ?? 0) + 1;
 
-        if (recoveryReadError) {
-          console.error(
-            "Could not read payment recovery attempts:",
-            recoveryReadError
-          );
-        }
+    const { error: recoveryUpdateError } = await supabaseAdmin
+      .from("payment_recovery")
+      .update({
+        attempts: nextAttempts,
+        last_error: String(error.message || error).slice(0, 1000),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("razorpay_payment_id", razorpay_payment_id)
+      .eq("status", "pending");
 
-        const nextAttempts =
-          Number(recoveryRecord?.attempts ?? 0) + 1;
+    if (recoveryUpdateError) {
+      console.error(
+        "Could not update failed order recovery record:",
+        recoveryUpdateError
+      );
+    }
+  }
 
-       const recoveryPayload = {
-  razorpay_payment_id,
-  razorpay_order_id,
-  customer_id: user.id,
-  customer_email: user.email,
-  customer_name,
-  customer_mobile,
-  address,
-  area,
-  city,
-  pincode,
-  state,
-  items,
-  expected_amount_paise: Math.round(
-    verifiedTotal * 100
-  ),
-  status: "pending",
-  attempts: nextAttempts,
-  last_error: String(
-    error.message || error
-  ).slice(0, 1000),
-  updated_at: new Date().toISOString(),
-};
-
-  const { error: recoveryUpdateError } =
-  await supabaseAdmin
+  return NextResponse.json(
+    {
+      error:
+        "Payment verification succeeded, but order creation needs recovery. Please contact support and provide your Razorpay payment ID.",
+      recoveryRequired: true,
+      paymentId: razorpay_payment_id || null,
+    },
+    { status: 500 }
+  );
+}
+// Order creation succeeded: mark recovery as completed.
+if (payment_method === "online" && razorpay_payment_id) {
+  const { error: recoveryCompleteError } = await supabaseAdmin
     .from("payment_recovery")
     .update({
-      attempts: nextAttempts,
-      last_error: String(
-        error.message || error
-      ).slice(0, 1000),
+      status: "completed",
+      order_number: data?.order_number || null,
+      last_error: null,
       updated_at: new Date().toISOString(),
     })
     .eq("razorpay_payment_id", razorpay_payment_id)
     .eq("status", "pending");
 
-    if (recoveryUpdateError) {
-      console.error(
-        "CRITICAL: Could not save failed order recovery record.",
-        {
-          paymentId: razorpay_payment_id,
-          error: recoveryUpdateError.message,
-        }
-      );
-    }
-      }
-
-      return NextResponse.json(
-        {
-          error:
-            "Payment verification succeeded, but order creation needs recovery. Please contact support and provide your Razorpay payment ID.",
-          recoveryRequired: true,
-          paymentId: razorpay_payment_id || null,
-        },
-        { status: 500 }
-      );
-    }
-
-// Order creation succeeded: mark its recovery record completed.
-if (payment_method === "online" && razorpay_payment_id) {
-  const { error: recoveryUpdateError } = await supabaseAdmin
-    .from("payment_recovery")
-    .upsert(
-      {
-        razorpay_payment_id,
-        razorpay_order_id,
-        customer_id: user.id,
-        customer_email: user.email,
-        customer_name,
-        customer_mobile,
-        address,
-        area,
-        city,
-        pincode,
-        state,
-        items,
-        expected_amount_paise: Math.round(verifiedTotal * 100),
-        status: "completed",
-        order_number: data?.order_number || null,
-        last_error: null,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: "razorpay_payment_id",
-      }
-    );
-
-  if (recoveryUpdateError) {
+  if (recoveryCompleteError) {
     console.error(
-      "Order created, but recovery record could not be marked completed.",
-      {
-        paymentId: razorpay_payment_id,
-        orderNumber: data?.order_number || null,
-        error: recoveryUpdateError.message,
-      }
+      "Order created, but recovery record could not be marked completed:",
+      recoveryCompleteError
     );
   }
 }
 
-    return NextResponse.json(
-      {
-        success: true,
-        duplicate: data?.duplicate === true,
-        order: data,
-      },
-      { status: data?.duplicate === true ? 200 : 201 }
-    );
-    
-  } catch (error) {
-    console.error("Order API error:", error);
+return NextResponse.json(
+  {
+    success: true,
+    duplicate: data?.duplicate === true,
+    order: data,
+  },
+  { status: data?.duplicate === true ? 200 : 201 }
+);
 
-    return NextResponse.json(
-      {
-        error:
-          "We could not complete your order request. If your payment was successful, please contact support with your Razorpay payment ID.",
-        recoveryRequired: true,
-      },
-      { status: 500 }
-    );
-  }
+} catch (error) {
+  console.error("Order API error:", error);
+
+  return NextResponse.json(
+    {
+      error:
+        "We could not complete your order request. If your payment was successful, please contact support with your Razorpay payment ID.",
+      recoveryRequired: true,
+    },
+    { status: 500 }
+  );
+}
 }
