@@ -101,11 +101,16 @@ export async function POST(req: Request) {
             { status: 400 }
         );
         }
-    const razorpayOrder = await razorpay.orders.create({
-      amount: Math.round(total * 100),
-      currency: "INR",
-      receipt: `receipt_${Date.now()}`,
-    });
+ const razorpayOrder = await razorpay.orders.create({
+  amount: Math.round(total * 100),
+  currency: "INR",
+  receipt: `receipt_${Date.now()}`,
+notes: {
+  customer_id: String(user.id),
+  customer_email: String(user.email),
+  recovery_version: "1",
+},
+});
 
     return NextResponse.json({
       success: true,

@@ -347,11 +347,23 @@ const handlePlaceOrder = async () => {
               return;
             }
 
-            const orderNumber =
-              orderResult.order?.order_number ||
-              orderResult.order_number;
+          
+      const orderNumber =
+        orderResult.order?.order_number ||
+        orderResult.order?.order?.order_number ||
+        orderResult.order_number;
 
+      if (!orderNumber) {
+        console.error(
+          "Order created but order number is missing:",
+          orderResult
+        );
 
+        alert(
+          "Your payment may have succeeded, but we could not confirm your order number. Please contact support before trying to pay again."
+        );
+        return;
+      }
             localStorage.setItem(
               "eleganza-last-order",
               orderNumber
