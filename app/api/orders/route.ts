@@ -286,55 +286,7 @@ if (invalidProduct) {
     { status: 409 }
   );
 }
-if (invalidProduct) {
-  if (
-    payment_method === "online" &&
-    payment &&
-    razorpay_payment_id &&
-    razorpay_order_id
-  ) {
-    const { error: recoveryError } = await supabaseAdmin
-      .from("payment_recovery")
-      .upsert(
-        {
-          razorpay_payment_id,
-          razorpay_order_id,
-          customer_id: user.id,
-          customer_email: user.email,
-          customer_name,
-          customer_mobile,
-          address,
-          area,
-          city,
-          pincode,
-          state,
-          items,
-          expected_amount_paise: Number(payment.amount),
-          status: "needs_review",
-          last_error: invalidProduct.slice(0, 1000),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "razorpay_payment_id" }
-      );
 
-    if (recoveryError) {
-      console.error(
-        "Failed to save invalid-product recovery:",
-        recoveryError
-      );
-    }
-  }
-
-  return NextResponse.json(
-    {
-      error:
-        "A product could not be verified. If your payment was captured, contact support with your Razorpay payment ID.",
-      recoveryRequired: payment?.status === "captured",
-      paymentId: razorpay_payment_id || null,
-    },
-    { status: 409 }
-  );
-}
     if (verifiedTotal <= 0) {
       return NextResponse.json(
         {
@@ -453,7 +405,10 @@ if (previousRecoveryError) {
   );
 }
 
-if (previousRecovery?.status === "needs_review") {
+if (
+  previousRecovery?.status === "needs_review" ||
+  previousRecovery?.status === "completed"
+) {
   return NextResponse.json(
     {
       error:
@@ -597,6 +552,7 @@ let recoveryResult = await supabaseAdmin
   .from("payment_recovery")
   .upsert(recoveryPayload, {
     onConflict: "razorpay_payment_id",
+    ignoreDuplicates: true,
   });
 
 // Retry saving the recovery record once.
@@ -607,10 +563,11 @@ if (recoveryResult.error) {
   );
 
   recoveryResult = await supabaseAdmin
-    .from("payment_recovery")
-    .upsert(recoveryPayload, {
-      onConflict: "razorpay_payment_id",
-    });
+  .from("payment_recovery")
+  .upsert(recoveryPayload, {
+    onConflict: "razorpay_payment_id",
+    ignoreDuplicates: true,
+  });
 }
 
 if (recoveryResult.error) {
