@@ -240,14 +240,34 @@ for (const item of items) {
 if (invalidProduct) {
   if (
     payment_method === "online" &&
-    payment &&
+    payment?.status === "captured" &&
     razorpay_payment_id &&
     razorpay_order_id
   ) {
-    const { error: recoveryError } = await supabaseAdmin
-      .from("payment_recovery")
-      .upsert(
-        {
+    const { data: existingOrder, error: orderError } =
+      await supabaseAdmin
+        .from("orders")
+        .select("id")
+        .eq("razorpay_payment_id", razorpay_payment_id)
+        .maybeSingle();
+
+    if (orderError) {
+      console.error("Invalid-product order lookup failed:", orderError);
+    } else if (!existingOrder) {
+      const { data: previousRecovery, error: lookupError } =
+        await supabaseAdmin
+          .from("payment_recovery")
+          .select("status")
+          .eq("razorpay_payment_id", razorpay_payment_id)
+          .maybeSingle();
+
+      if (lookupError) {
+        console.error("Invalid-product recovery lookup failed:", lookupError);
+      } else if (
+        previousRecovery?.status !== "completed" &&
+        previousRecovery?.status !== "needs_review"
+      ) {
+        const recoveryPayload = {
           razorpay_payment_id,
           razorpay_order_id,
           customer_id: user.id,
@@ -264,15 +284,29 @@ if (invalidProduct) {
           status: "needs_review",
           last_error: invalidProduct.slice(0, 1000),
           updated_at: new Date().toISOString(),
-        },
-        { onConflict: "razorpay_payment_id" }
-      );
+        };
 
-    if (recoveryError) {
-      console.error(
-        "CRITICAL: Could not save invalid-product payment recovery",
-        recoveryError
-      );
+        const { error: recoveryError } = previousRecovery
+          ? await supabaseAdmin
+              .from("payment_recovery")
+              .update({
+                status: "needs_review",
+                last_error: recoveryPayload.last_error,
+                updated_at: recoveryPayload.updated_at,
+              })
+              .eq("razorpay_payment_id", razorpay_payment_id)
+              .eq("status", "pending")
+          : await supabaseAdmin
+              .from("payment_recovery")
+              .insert(recoveryPayload);
+
+        if (recoveryError) {
+          console.error(
+            "Could not save invalid-product payment recovery:",
+            recoveryError
+          );
+        }
+      }
     }
   }
 
@@ -300,18 +334,134 @@ if (invalidProduct) {
         verifiedTotal * 100
       );
 
-      if (
-        Number(payment.amount) !==
-        expectedAmount
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "Payment amount mismatch",
-          },
-          { status: 400 }
-        );
-      }
+if (Number(payment.amount) !== expectedAmount) {
+  const paymentId = razorpay_payment_id;
+  const orderId = razorpay_order_id;
+
+  if (!paymentId || !orderId || payment?.status !== "captured") {
+    return NextResponse.json(
+      { error: "Payment amount mismatch" },
+      { status: 400 }
+    );
+  }
+
+  // Never create a recovery record over an existing order.
+  const { data: existingOrder, error: orderLookupError } =
+    await supabaseAdmin
+      .from("orders")
+      .select("id, order_number")
+      .eq("razorpay_payment_id", paymentId)
+      .maybeSingle();
+
+  if (orderLookupError) {
+    console.error("Amount mismatch order lookup failed:", orderLookupError);
+
+    return NextResponse.json(
+      {
+        error: "Payment needs manual verification.",
+        recoveryRequired: true,
+        paymentId,
+      },
+      { status: 500 }
+    );
+  }
+
+  if (existingOrder) {
+    return NextResponse.json(
+      {
+        success: true,
+        duplicate: true,
+        order: {
+          order_id: existingOrder.id,
+          order_number: existingOrder.order_number,
+        },
+      },
+      { status: 200 }
+    );
+  }
+
+  const { data: previousRecovery, error: recoveryLookupError } =
+    await supabaseAdmin
+      .from("payment_recovery")
+      .select("status")
+      .eq("razorpay_payment_id", paymentId)
+      .maybeSingle();
+
+  if (recoveryLookupError) {
+    console.error("Recovery lookup failed:", recoveryLookupError);
+
+    return NextResponse.json(
+      {
+        error: "Payment needs manual verification.",
+        recoveryRequired: true,
+        paymentId,
+      },
+      { status: 500 }
+    );
+  }
+
+  if (
+    previousRecovery?.status === "needs_review" ||
+    previousRecovery?.status === "completed"
+  ) {
+    return NextResponse.json(
+      {
+        error: "This payment requires manual verification.",
+        recoveryRequired: true,
+        paymentId,
+      },
+      { status: 409 }
+    );
+  }
+
+  const recoveryPayload = {
+    razorpay_payment_id: paymentId,
+    razorpay_order_id: orderId,
+    customer_id: user.id,
+    customer_email: user.email,
+    customer_name,
+    customer_mobile,
+    address,
+    area,
+    city,
+    pincode,
+    state,
+    items,
+    expected_amount_paise: Number(payment.amount),
+    status: "needs_review",
+    last_error: "Captured payment amount does not match verified product total.",
+    updated_at: new Date().toISOString(),
+  };
+
+  const recoveryWrite = previousRecovery
+    ? await supabaseAdmin
+        .from("payment_recovery")
+        .update({
+          status: "needs_review",
+          expected_amount_paise: Number(payment.amount),
+          last_error: recoveryPayload.last_error,
+          updated_at: recoveryPayload.updated_at,
+        })
+        .eq("razorpay_payment_id", paymentId)
+        .eq("status", "pending")
+    : await supabaseAdmin
+        .from("payment_recovery")
+        .insert(recoveryPayload);
+
+  if (recoveryWrite.error) {
+    console.error("Could not save amount mismatch recovery:", recoveryWrite.error);
+  }
+
+  return NextResponse.json(
+    {
+      error:
+        "Payment was captured, but the amount does not match. Contact support with your Razorpay payment ID.",
+      recoveryRequired: true,
+      paymentId,
+    },
+    { status: 409 }
+  );
+}
     // Recover an order already created for this verified payment.
     if (razorpay_payment_id) {
       const {
@@ -438,11 +588,19 @@ if (
     updated_at: new Date().toISOString(),
   };
 
-  const { error: recoveryError } = await supabaseAdmin
-    .from("payment_recovery")
-    .upsert(recoveryPayload, {
-      onConflict: "razorpay_payment_id",
-    });
+  const { error: recoveryError } = previousRecovery
+  ? await supabaseAdmin
+      .from("payment_recovery")
+      .update({
+        status: "needs_review",
+        last_error: recoveryPayload.last_error,
+        updated_at: recoveryPayload.updated_at,
+      })
+      .eq("razorpay_payment_id", razorpay_payment_id)
+      .eq("status", "pending")
+  : await supabaseAdmin
+      .from("payment_recovery")
+      .insert(recoveryPayload);
 
   if (recoveryError) {
     console.error("CRITICAL: Could not save stock-related payment recovery.", {
