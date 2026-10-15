@@ -18,10 +18,16 @@ export async function generateMetadata({
     .select("name, description, image, images, category")
     .order("id", { ascending: true });
 
-  const product = products?.find(
-    (item) =>
-      item.name.toLowerCase().replaceAll(" ", "-") === productSlug
-  );
+const normalizeSlug = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+const product = products?.find(
+  (item) => normalizeSlug(item.name) === normalizeSlug(productSlug)
+);
 
   if (!product) {
     return {
