@@ -21,6 +21,7 @@ const categories = [
 ];
 type Product = {
   name: string;
+  slug: string;
   category: string;
   price: string;
   image?: string;
@@ -984,9 +985,7 @@ return {
              <div
   className={`product-image product-${index + 1}`}
   onClick={() =>
-    window.location.href = `/product/${product.name
-      .toLowerCase()
-      .replaceAll(" ", "-")}`
+  window.location.href = `/product/${product.slug}`
   }
 >
   <img
@@ -999,9 +998,7 @@ return {
                 <p>{product.category}</p>
                <h3
   onClick={() =>
-    window.location.href = `/product/${product.name
-      .toLowerCase()
-      .replaceAll(" ", "-")}`
+     window.location.href = `/product/${product.slug}`
   }
   style={{ cursor: "pointer" }}
 >
