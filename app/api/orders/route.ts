@@ -73,7 +73,153 @@ function verifyRazorpaySignature(
     receivedBuffer
   );
 }
+async function createShiprocketForSavedOrder(
+  orderNumber: string,
+  customerEmail: string
+) {
+  const { data: order, error } = await supabaseAdmin
+    .from("orders")
+    .select("*")
+    .eq("order_number", orderNumber)
+    .maybeSingle();
 
+  if (error || !order) {
+    throw new Error("Saved order could not be found");
+  }
+
+  if (
+    order.customer_email?.toLowerCase() !==
+      customerEmail.toLowerCase() ||
+    order.payment_method !== "online" ||
+    !order.razorpay_payment_id
+  ) {
+    throw new Error("Order ownership or payment verification failed");
+  }
+
+  if (order.shiprocket_order_id || order.shiprocket_shipment_id) {
+    return { alreadyCreated: true };
+  }
+
+  const items = Array.isArray(order.items) ? order.items : [];
+
+  if (!items.length) {
+    throw new Error("Saved order has no items");
+  }
+
+  const orderItems = [];
+
+  for (const item of items) {
+    const { data: product, error: productError } = await supabaseAdmin
+      .from("products")
+      .select("name, price")
+      .eq("name", item.name)
+      .maybeSingle();
+
+    if (productError || !product) {
+      throw new Error(`Product not found: ${item.name}`);
+    }
+
+    orderItems.push({
+      name: product.name,
+      sku: product.name.toLowerCase().replace(/\s+/g, "-"),
+      units: Number(item.quantity),
+      selling_price: Number(product.price),
+      discount: 0,
+      tax: 0,
+      hsn: "",
+    });
+  }
+
+  const authResponse = await fetch(
+    "https://apiv2.shiprocket.in/v1/external/auth/login",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: process.env.SHIPROCKET_EMAIL,
+        password: process.env.SHIPROCKET_PASSWORD,
+      }),
+    }
+  );
+
+  const authData = await authResponse.json();
+
+  if (!authResponse.ok || !authData.token) {
+    throw new Error("Shiprocket authentication failed");
+  }
+
+  const fullAddress = [order.address, order.area]
+    .filter(Boolean)
+    .join(", ");
+
+  const shipResponse = await fetch(
+    "https://apiv2.shiprocket.in/v1/external/orders/create/adhoc",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authData.token}`,
+      },
+      body: JSON.stringify({
+        order_id: order.order_number,
+        order_date: order.created_at || new Date().toISOString(),
+        pickup_location: "home",
+
+        billing_customer_name: order.customer_name,
+        billing_last_name: "",
+        billing_address: fullAddress,
+        billing_city: order.city,
+        billing_pincode: String(order.pincode),
+        billing_state: order.state,
+        billing_country: "India",
+        billing_email: order.customer_email,
+        billing_phone: String(order.customer_mobile),
+
+        shipping_is_billing: true,
+        order_items: orderItems,
+        payment_method: "Prepaid",
+        sub_total: Number(order.total),
+
+        length: 20,
+        breadth: 15,
+        height: 10,
+        weight: 0.5,
+      }),
+    }
+  );
+
+  const shipData = await shipResponse.json();
+
+  if (!shipResponse.ok || !shipData.shipment_id) {
+    throw new Error(
+      shipData.message || "Shiprocket order creation failed"
+    );
+  }
+
+  const { error: saveError } = await supabaseAdmin
+    .from("orders")
+    .update({
+      shiprocket_order_id: shipData.order_id ?? null,
+      shiprocket_shipment_id: shipData.shipment_id,
+      shiprocket_awb_code: null,
+      shiprocket_courier_name: null,
+      shiprocket_status: "NEW",
+      shiprocket_tracking_url: null,
+    })
+    .eq("order_number", order.order_number)
+    .eq("customer_email", customerEmail)
+    .is("shiprocket_shipment_id", null);
+
+  if (saveError) {
+    console.error(
+      "Shiprocket IDs could not be saved:",
+      saveError.message
+    );
+    throw new Error("Shiprocket created but saving its IDs failed");
+  }
+
+  return { alreadyCreated: false };
+}
 export async function POST(request: Request) {
   try {
         const user = await getAuthenticatedUser(request);
@@ -843,12 +989,45 @@ if (payment_method === "online" && razorpay_payment_id) {
     );
   }
 }
+let shippingCreated = false;
+let shippingMessage = "Not applicable";
 
+if (payment_method === "online" && razorpay_payment_id) {
+  const { data: savedOrder, error: savedOrderError } =
+    await supabaseAdmin
+      .from("orders")
+      .select("order_number")
+      .eq("razorpay_payment_id", razorpay_payment_id)
+      .maybeSingle();
+
+  if (savedOrderError || !savedOrder) {
+    console.error(
+      "Order saved, but Shiprocket lookup failed:",
+      savedOrderError?.message
+    );
+    shippingMessage = "Order saved; shipping needs manual review";
+  } else {
+    try {
+      await createShiprocketForSavedOrder(
+        savedOrder.order_number,
+        user.email
+      );
+
+      shippingCreated = true;
+      shippingMessage = "Shiprocket order created; AWB/pickup pending";
+    } catch (shippingError) {
+      console.error("Shiprocket creation failed:", shippingError);
+      shippingMessage = "Order saved; Shiprocket creation needs retry";
+    }
+  }
+}
 return NextResponse.json(
   {
     success: true,
     duplicate: data?.duplicate === true,
     order: data,
+    shippingCreated,
+    shippingMessage,
   },
   { status: data?.duplicate === true ? 200 : 201 }
 );
