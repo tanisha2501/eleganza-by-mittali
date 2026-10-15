@@ -112,7 +112,7 @@ if (order.shiprocket_status === "CREATING") {
     throw new Error("Saved order has no items");
   }
 
-const orderItems = items.map((item: any) => {
+ const orderItems = items.map((item: any) => {
   const price = Number(item.price);
   const quantity = Number(item.quantity);
 
@@ -1048,7 +1048,8 @@ if (payment_method === "online" && razorpay_payment_id) {
       shippingMessage = "Shiprocket order created; AWB/pickup pending";
     } catch (shippingError) {
       console.error("Shiprocket creation failed:", shippingError);
-      shippingMessage = "Order saved; Shiprocket creation needs retry";
+      shippingMessage =
+     "Order saved; verify Shiprocket dashboard before retrying";
     }
   }
 }
