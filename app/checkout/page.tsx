@@ -339,7 +339,7 @@ const handlePlaceOrder = async () => {
             const orderResult =
               await orderResponse.json();
 
-            if (!orderResponse.ok) {
+           if (!orderResponse.ok || !orderResult.success) { 
               alert(
                 orderResult.error ||
                   "Payment succeeded but order creation failed. Please contact support."
