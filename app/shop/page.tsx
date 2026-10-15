@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabase";
 
 type Product = {
   name: string;
+  slug: string;
   category: string;
   price: string | number;
   image?: string;
@@ -168,10 +169,7 @@ const filteredProducts =
                 className="product-card"
                 key={product.name}
                 onClick={() => {
-                  window.location.href =
-                    `/product/${product.name
-                      .toLowerCase()
-                      .replaceAll(" ", "-")}`;
+                  window.location.href = `/product/${product.slug}`;
                 }}
               >
 
