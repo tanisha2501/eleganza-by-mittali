@@ -636,41 +636,38 @@ if (Number(payment.amount) !== expectedAmount) {
         );
       }
 
-      if (existingOrder) {
-        // Mark recovery completed if a recovery record exists.
-        const { error: recoveryUpdateError } =
-          await supabaseAdmin
-            .from("payment_recovery")
-            .update({
-              status: "completed",
-              order_number: existingOrder.order_number,
-              last_error: null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq(
-              "razorpay_payment_id",
-              razorpay_payment_id
-            );
+if (existingOrder) {
+  const { error: recoveryUpdateError } = await supabaseAdmin
+    .from("payment_recovery")
+    .update({
+      status: "completed",
+      order_number: existingOrder.order_number,
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("razorpay_payment_id", razorpay_payment_id);
 
-        if (recoveryUpdateError) {
-          console.error(
-            "Could not update existing payment recovery record:",
-            recoveryUpdateError
-          );
-        }
+  if (recoveryUpdateError) {
+    console.error(
+      "Recovery update failed:",
+      recoveryUpdateError.message
+    );
+  }
 
-        return NextResponse.json(
-          {
-            success: true,
-            duplicate: true,
-            order: {
-              order_id: existingOrder.id,
-              order_number: existingOrder.order_number,
-            },
-          },
-          { status: 200 }
-        );
-      }
+  return NextResponse.json(
+    {
+      success: true,
+      duplicate: true,
+      order: {
+        order_id: existingOrder.id,
+        order_number: existingOrder.order_number,
+      },
+      shippingMessage:
+        "Existing order found. Check Shiprocket status before retrying.",
+    },
+    { status: 200 }
+  );
+}
     }
     if (
   payment_method === "online" &&
