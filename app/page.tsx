@@ -18,6 +18,11 @@ const categories = [
     description: "Timeless ethnic collections",
     image: "/categories/suits.jpg",
   },
+  {
+  name: "Unstitched Suits",
+  image: "/categories/unstitched-suits.png",
+  description: "Beautiful fabrics, your own style",
+},
 ];
 type Product = {
   name: string;
