@@ -103,13 +103,17 @@ export default function ProductPage() {
   loadProducts();
 }, []);
 
-  const product = allProducts.find(
-    (item) =>
-      item.name
-        .toLowerCase()
-        .replaceAll(" ", "-") === slug
-  );
+const normalizeSlug = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 
+const product = allProducts.find(
+  (item) =>
+    normalizeSlug(item.name) === normalizeSlug(slug)
+);
   const sizes = product
   ? getAvailableSizes(product)
   : [];
