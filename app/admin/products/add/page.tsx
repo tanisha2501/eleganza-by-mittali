@@ -316,6 +316,9 @@ const uploadImageToStorage = async (file: File) => {
             <option value="Suits">
               Suits
             </option>
+            <option value="Unstitched Suits">
+             Unstitched Suits
+             </option>
           </select>
             </div>
 

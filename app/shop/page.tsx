@@ -21,6 +21,7 @@ const categories = [
   "Farshi Sets",
   "Cord Sets",
   "Suits",
+  "Unstitched Suits",
 ];
 
 export default function ShopPage() {

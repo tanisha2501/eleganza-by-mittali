@@ -416,6 +416,9 @@ const removeSize = (sizeToRemove: string) => {
               <option value="Suits">
                 Suits
               </option>
+              <option value="Unstitched Suits">
+               Unstitched Suits
+                 </option>
             </select>
 
             </div>
