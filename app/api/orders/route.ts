@@ -112,29 +112,32 @@ if (order.shiprocket_status === "CREATING") {
     throw new Error("Saved order has no items");
   }
 
-  const orderItems = [];
+const orderItems = items.map((item: any) => {
+  const price = Number(item.price);
+  const quantity = Number(item.quantity);
 
-  for (const item of items) {
-    const { data: product, error: productError } = await supabaseAdmin
-      .from("products")
-      .select("name, price")
-      .eq("name", item.name)
-      .maybeSingle();
-
-    if (productError || !product) {
-      throw new Error(`Product not found: ${item.name}`);
-    }
-
-    orderItems.push({
-      name: product.name,
-      sku: product.name.toLowerCase().replace(/\s+/g, "-"),
-      units: Number(item.quantity),
-      selling_price: Number(product.price),
-      discount: 0,
-      tax: 0,
-      hsn: "",
-    });
+  if (
+    !Number.isFinite(price) ||
+    price <= 0 ||
+    !Number.isSafeInteger(quantity) ||
+    quantity <= 0
+  ) {
+    throw new Error(
+      `Invalid saved price or quantity for ${item.name}`
+    );
   }
+
+  return {
+    name: item.name,
+    sku: item.name.toLowerCase().replace(/\s+/g, "-"),
+    units: quantity,
+    selling_price: price,
+    discount: 0,
+    tax: 0,
+    hsn: "",
+  };
+});
+
 const { data: claimedOrder, error: claimError } =
   await supabaseAdmin
     .from("orders")
