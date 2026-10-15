@@ -53,15 +53,6 @@ export default function CancellationRefundPage() {
         </div>
 
         <div className="policy-block">
-          <h2>Cash on Delivery Orders</h2>
-          <p>
-            For Cash on Delivery orders, cancellation before shipping will
-            simply cancel the order. No payment refund is applicable because
-            payment has not been made at the time of cancellation.
-          </p>
-        </div>
-
-        <div className="policy-block">
           <h2>After Shipping</h2>
           <p>
             Once an order has been shipped, it cannot be cancelled.

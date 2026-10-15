@@ -20,7 +20,7 @@ export default function ReturnExchangePolicyPage() {
 
           <p>
             Customers can request an exchange for an eligible product
-            through the My Orders section of their account.
+            through the My Orders section of their account within 7 days of receiving the order.
           </p>
 
           <p>
@@ -33,6 +33,12 @@ export default function ReturnExchangePolicyPage() {
           <h2>Exchange Eligibility</h2>
 
           <ul>
+            <li>
+              Exchange requests must be made within 7 days of receiving the order.
+            </li>
+            <li>
+              Exchange will be accepted only if an unboxing video is provided for the product, if requested by our team.
+            </li>
             <li>
               The product must be unused and in its original condition.
             </li>
