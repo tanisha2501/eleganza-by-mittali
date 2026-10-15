@@ -96,9 +96,15 @@ async function createShiprocketForSavedOrder(
     throw new Error("Order ownership or payment verification failed");
   }
 
-  if (order.shiprocket_order_id || order.shiprocket_shipment_id) {
-    return { alreadyCreated: true };
-  }
+ if (order.shiprocket_order_id || order.shiprocket_shipment_id) {
+  return { alreadyCreated: true };
+}
+
+if (order.shiprocket_status === "CREATING") {
+  throw new Error(
+    "Shiprocket creation is already in progress or needs manual verification"
+  );
+}
 
   const items = Array.isArray(order.items) ? order.items : [];
 
@@ -129,7 +135,23 @@ async function createShiprocketForSavedOrder(
       hsn: "",
     });
   }
+const { data: claimedOrder, error: claimError } =
+  await supabaseAdmin
+    .from("orders")
+    .update({ shiprocket_status: "CREATING" })
+    .eq("order_number", order.order_number)
+    .eq("customer_email", customerEmail)
+    .is("shiprocket_shipment_id", null)
+    .is("shiprocket_order_id", null)
+    .neq("shiprocket_status", "CREATING")
+    .select("order_number")
+    .maybeSingle();
 
+if (claimError || !claimedOrder) {
+  throw new Error(
+    "Shipping is already processing or needs manual verification"
+  );
+}
   const authResponse = await fetch(
     "https://apiv2.shiprocket.in/v1/external/auth/login",
     {
@@ -144,9 +166,18 @@ async function createShiprocketForSavedOrder(
 
   const authData = await authResponse.json();
 
-  if (!authResponse.ok || !authData.token) {
-    throw new Error("Shiprocket authentication failed");
-  }
+if (!authResponse.ok || !authData.token) {
+  await supabaseAdmin
+    .from("orders")
+    .update({ shiprocket_status: "NEW" })
+    .eq("order_number", order.order_number)
+    .eq("customer_email", customerEmail)
+    .eq("shiprocket_status", "CREATING")
+    .is("shiprocket_shipment_id", null)
+    .is("shiprocket_order_id", null);
+
+  throw new Error("Shiprocket authentication failed");
+}
 
   const fullAddress = [order.address, order.area]
     .filter(Boolean)
