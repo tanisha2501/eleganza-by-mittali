@@ -68,22 +68,44 @@ export async function POST(req: Request) {
         );
       }
 
+      
+      const quantity = Number(item.quantity);
+
+      if (
+        typeof item.name !== "string" ||
+        typeof item.size !== "string" ||
+        !item.size.trim() ||
+        !Number.isSafeInteger(quantity) ||
+        quantity <= 0
+      ) {
+        return NextResponse.json(
+          { error: "Invalid product size or quantity" },
+          { status: 400 }
+        );
+      }
+
       const colour = item.colour || "Default";
       const size = item.size;
-
       const colourStock = product.sizes?.[colour];
 
-      if (!colourStock) {
+      if (
+        !colourStock ||
+        typeof colourStock !== "object" ||
+        Array.isArray(colourStock)
+      ) {
         return NextResponse.json(
           { error: `Colour not found for ${item.name}` },
           { status: 400 }
         );
       }
 
-      const availableStock = Number(colourStock[size] ?? 0);
-      const quantity = Number(item.quantity);
+      const availableStock = Number(colourStock[size]);
 
-      if (quantity <= 0 || availableStock < quantity) {
+      if (
+        !Number.isSafeInteger(availableStock) ||
+        availableStock < 0 ||
+        availableStock < quantity
+      ) {
         return NextResponse.json(
           {
             error: `Not enough stock for ${item.name} (${colour}, ${size})`,
