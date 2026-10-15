@@ -143,7 +143,7 @@ const { data: claimedOrder, error: claimError } =
     .eq("customer_email", customerEmail)
     .is("shiprocket_shipment_id", null)
     .is("shiprocket_order_id", null)
-    .neq("shiprocket_status", "CREATING")
+    .or("shiprocket_status.is.null,shiprocket_status.neq.CREATING")
     .select("order_number")
     .maybeSingle();
 
