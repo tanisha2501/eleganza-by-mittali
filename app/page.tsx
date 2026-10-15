@@ -20,7 +20,7 @@ const categories = [
   },
   {
   name: "Unstitched Suits",
-  image: "/categories/unstitched-suits.png",
+  image: "/categories/unstitched-suits.jpg",
   description: "Beautiful fabrics, your own style",
 },
 ];
